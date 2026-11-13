@@ -368,6 +368,7 @@
       },
       /* 数据来源：观测站点实时读的是本地缓存，不是每次渲染去联网 */
       srcLabel: function () {
+        if (this.isObs && this.site === 'site_03') return '大陈海洋站历史观测 · 海域参考，非网箱现场实测';
         if (this.isObs) return '中国近海台站实测（本地入库，不联网）';
         return '仿真生成（仿真演示站点）';
       },
@@ -650,6 +651,22 @@
         }
         return s.latest_ts_utc || s.last_local || '—';
       },
+      obsRangeText: function () {
+        const list = this.ndbcList;
+        if (!list || !list.length) return '—';
+        const cur = API.sites().filter(function (x) { return x.site_id === this.site; }.bind(this))[0];
+        const st = cur ? (cur.station_id || '') : '';
+        for (let i = 0; i < list.length; i++) {
+          if (list[i].station_id === st) {
+            const s = list[i];
+            if (s.first_local && s.last_local) {
+              return s.first_local + ' ~ ' + s.last_local + '（北京时间）';
+            }
+            if (s.latest_ts_local) return '截至 ' + s.latest_ts_local;
+          }
+        }
+        return '—';
+      },
       loadRanges: function () {
         const self = this;
         if (typeof fetch !== 'function') return;
@@ -850,7 +867,7 @@
     },
     template: [
       "<div class=\"show-page show-env\" :class=\"pageKey==='water'?'env-water':'env-sea'\"><page-head title=\"环境 · 海况\" desc=\"当前网箱海域与观测站上下文分别标明 · 实测与仿真独立呈现\" /><div class=\"show-body\" style=\"gap:10px\">",
-      "<div class=\"show-actions\"><label>观测站 <select :value=\"site\" @change=\"setSite($event.target.value)\"><option v-for=\"s in API.sites()\" :key=\"s.site_id\" :value=\"s.site_id\">{{siteDisplay(s)}}</option></select></label><time-range :model-value=\"activePer.minutes\" @update:model-value=\"onMinutes\" /><span class=\"tag tag-simulated\" v-if=\"!isObs\">养殖站点仿真</span><span class=\"tag\" v-else>历史观测 · 非实时</span></div><div class=\"show-note\">{{siteName()}} · {{srcLabel}} · 观测时间 {{last.ts?fmtTs(last.ts):'—'}}<template v-if=\"isObs&&pageKey==='water'\"> · 溶氧 / pH 月度观测 {{wqNow.ts?fmtTs(wqNow.ts):'—'}}</template></div><div v-if=\"!followCage\" class=\"show-note\">正在查看其他海域。<button @click=\"backToCage\">回到当前网箱所在海域</button></div><show-screens :labels=\"['海况变化','异常事件']\"><template #default=\"{screen}\"><div v-show=\"screen===0\" class=\"show-env-stage\"><section class=\"card env-chart\"><div class=\"card-title\">海况变化 · 浪高 / 风速 / 流速 / 气温<span class=\"env-hint\">滚轮缩放 / 框选 · 圆点为异常命中点</span></div><div ref=\"chartEl\" class=\"chart\"></div></section><section class=\"card env-model\"><div class=\"env-label\">设施与浪流关系</div><scene-slot focus=\"overview\" /><a class=\"env-link\" href=\"#/mgmt/alarm\">告警追溯 →</a></section></div><div v-show=\"screen===1\" class=\"show-env-events\" style=\"display:flex;min-height:0\"><div class=\"card\"><div class=\"card-title\">海况事件 · {{events.length}} 条</div><paged-records :items=\"events\"><template #default=\"{rows}\"><div v-if=\"!rows.length\" class=\"empty\">本时段无越限事件</div><button v-for=\"it in rows\" :key=\"it.id\" class=\"row-item\" @click=\"picked=it\" style=\"text-align:left;width:100%\"><span class=\"t\">{{time(it.ts)}}</span><span class=\"dot\" :class=\"lvClass(it.level)\"></span><span class=\"d\">{{it.text}}</span></button></template></paged-records><div v-if=\"picked\" class=\"show-note\">已选事件：{{picked.text}}</div></div></div><div v-show=\"screen===0\" class=\"show-stats\">",
+      "<div class=\"show-actions\"><label>观测站 <select :value=\"site\" @change=\"setSite($event.target.value)\"><option v-for=\"s in API.sites()\" :key=\"s.site_id\" :value=\"s.site_id\">{{siteDisplay(s)}}</option></select></label><time-range :model-value=\"activePer.minutes\" @update:model-value=\"onMinutes\" /><span class=\"tag tag-simulated\" v-if=\"!isObs\">养殖站点仿真</span><span class=\"tag\" v-else>历史观测 · 非实时</span></div><div class=\"show-note\">{{siteName()}} · {{srcLabel}} · <template v-if=\"isObs\">数据时间范围 {{obsRangeText()}}</template><template v-else>观测时间 {{last.ts?fmtTs(last.ts):'—'}}</template><template v-if=\"isObs&&pageKey==='water'\"> · 溶氧 / pH 月度观测范围 {{wqRangeText}}</template></div><div v-if=\"!followCage\" class=\"show-note\">正在查看其他海域。<button @click=\"backToCage\">回到当前网箱所在海域</button></div><show-screens :labels=\"['海况变化','异常事件']\"><template #default=\"{screen}\"><div v-show=\"screen===0\" class=\"show-env-stage\"><section class=\"card env-chart\"><div class=\"card-title\">海况变化 · 浪高 / 风速 / 流速 / 气温<span class=\"env-hint\">滚轮缩放 / 框选 · 圆点为异常命中点</span></div><div ref=\"chartEl\" class=\"chart\"></div></section><section class=\"card env-model\"><div class=\"env-label\">设施与浪流关系</div><scene-slot focus=\"overview\" /><a class=\"env-link\" href=\"#/mgmt/alarm\">告警追溯 →</a></section></div><div v-show=\"screen===1\" class=\"show-env-events\" style=\"display:flex;min-height:0\"><div class=\"card\"><div class=\"card-title\">海况事件 · {{events.length}} 条</div><paged-records :items=\"events\"><template #default=\"{rows}\"><div v-if=\"!rows.length\" class=\"empty\">本时段无越限事件</div><button v-for=\"it in rows\" :key=\"it.id\" class=\"row-item\" @click=\"picked=it\" style=\"text-align:left;width:100%\"><span class=\"t\">{{time(it.ts)}}</span><span class=\"dot\" :class=\"lvClass(it.level)\"></span><span class=\"d\">{{it.text}}</span></button></template></paged-records><div v-if=\"picked\" class=\"show-note\">已选事件：{{picked.text}}</div></div></div><div v-show=\"screen===0\" class=\"show-stats\">",
       "    <stat-card class=\"is-primary\" name=\"浪高\" field=\"wave_height\" unit=\"m\" :value=\"last.wave_height\"",
       "               :note=\"isObs ? '该台站本期未测这项' : ''\"",
       "               :quality=\"last.quality\" :ts=\"last.ts\" />",
@@ -1117,6 +1134,12 @@
          的公开系统），走 slow 序列。它是**月度点位均值**，不是实时读数 ——
          所以卡片脚注写「水质月度点位均值」，并显示该月的观测时刻（不是"现在"）。
          养殖站点仍用仿真生成的慢变量。 */
+      wqRangeText: function () {
+        const s = this.slow;
+        if (!s || !s.length) return '—';
+        const H = global.__ENV_HELPERS__;
+        return H.fmtTs(s[0].ts) + ' ~ ' + H.fmtTs(s[s.length - 1].ts);
+      },
       wqNow: function () {
         const s = this.lastSlow || {};
         return {
@@ -1137,7 +1160,9 @@
         const s = API.sites().filter(function (x) { return x.site_id === sid; })[0];
         return !!(s && s.kind === 'obs');
       },
+      waterReference: function () { this.tick; return (this.series && this.series.water_quality) || {}; },
       srcLabel: function () {
+        if (this.isObs && this.site === 'site_03') return '水温：大陈海洋站历史观测；溶氧/pH：附近月度监测点 · 非网箱现场实测';
         if (this.isObs) return '中国近海台站实测（本地入库，不联网）';
         return '仿真生成（仿真演示站点）';
       },
@@ -1573,7 +1598,7 @@
     },
     template: [
       "<div class=\"show-page show-env\" :class=\"[pageKey==='water'?'env-water':'env-sea', metric==='compare'?'env-compare':'']\"><page-head title=\"环境 · 水质\" desc=\"当前网箱海域与观测站上下文分别标明 · 实测与仿真独立呈现\" /><div class=\"show-body\" style=\"gap:10px\">",
-      "<div class=\"show-actions\"><label>观测站 <select :value=\"site\" @change=\"setSite($event.target.value)\"><option v-for=\"s in API.sites()\" :key=\"s.site_id\" :value=\"s.site_id\">{{siteDisplay(s)}}</option></select></label><time-range :model-value=\"activePer.minutes\" @update:model-value=\"onMinutes\" /><span class=\"tag tag-simulated\" v-if=\"!isObs\">养殖站点仿真</span><span class=\"tag\" v-else>历史观测 · 非实时</span><template v-if=\"metric!=='compare'\"><button v-for=\"item in waterMetrics\" :key=\"item.key\" :class=\"{primary:metric===item.key}\" @click=\"selectMetric(item.key)\">{{item.label}}</button><button @click=\"selectMetric('compare')\">多指标对照</button></template><template v-else><button @click=\"selectMetric('water_temp')\">返回单指标</button><label v-for=\"item in waterMetrics.filter(x=>x.key!=='ph')\" :key=\"item.key\" class=\"small\"><input type=\"checkbox\" v-model=\"show[item.key]\" /> {{item.label}}</label></template></div><div class=\"show-note\">{{siteName()}} · {{srcLabel}} · 观测时间 {{last.ts?fmtTs(last.ts):'—'}}<template v-if=\"isObs&&pageKey==='water'\"> · 溶氧 / pH 月度观测 {{wqNow.ts?fmtTs(wqNow.ts):'—'}}</template></div><div v-if=\"!followCage\" class=\"show-note\">正在查看其他海域。<button @click=\"backToCage\">回到当前网箱所在海域</button></div><div v-if=\"topAlarm\" class=\"show-note\"><b>本时段命中规则：{{topAlarm.hit.rule_name}}</b> · {{topAlarm.hit.trigger_value}} / 阈值 {{topAlarm.hit.trigger_threshold}} · <a href=\"#/mgmt/alarm\">追溯完整链路 →</a></div><show-screens :labels=\"['水质观测','异常事件']\"><template #default=\"{screen}\"><div v-show=\"screen===0\" class=\"show-env-stage\"><section class=\"card env-chart\"><div class=\"card-title\">选中指标趋势<span class=\"env-hint\">滚轮缩放 / 框选 · 圆点为异常命中点</span></div><div v-if=\"isObs&&(metric==='dissolved_oxygen'||metric==='ph')\" class=\"show-note\">月度点位均值 · {{wqNow.ts?fmtTs(wqNow.ts):'—'}} · 当前值 {{metric==='ph'?(wqNow.ph??'—'):(wqNow.dissolved_oxygen??'—')}}，没有小时序列。</div><div v-show=\"!(isObs&&(metric==='dissolved_oxygen'||metric==='ph'))\" ref=\"chartEl\" class=\"chart\"></div></section><section class=\"card env-model\"><div class=\"env-label\">水质探头与测点</div><scene-slot focus=\"water\" /><a class=\"env-link\" href=\"#/mgmt/alarm\">告警追溯 →</a></section></div><div v-show=\"screen===1\" class=\"show-env-events\" style=\"display:flex;min-height:0\"><div class=\"card\"><div class=\"card-title\">水质事件 / 告警 · {{events.length}} 条</div><paged-records :items=\"events\"><template #default=\"{rows}\"><div v-if=\"!rows.length\" class=\"empty\">本时段无越限事件</div><button v-for=\"it in rows\" :key=\"it.id\" class=\"row-item\" @click=\"picked=it\" style=\"text-align:left;width:100%\"><span class=\"t\">{{time(it.ts)}}</span><span class=\"dot\" :class=\"lvClass(it.level)\"></span><span class=\"d\">{{it.text}}</span></button></template></paged-records><div v-if=\"picked\" class=\"show-note\">已选事件：{{picked.text}}</div></div></div><div v-show=\"screen===0\" class=\"show-stats\">",
+      "<div class=\"show-actions\"><label>观测站 <select :value=\"site\" @change=\"setSite($event.target.value)\"><option v-for=\"s in API.sites()\" :key=\"s.site_id\" :value=\"s.site_id\">{{siteDisplay(s)}}</option></select></label><time-range :model-value=\"activePer.minutes\" @update:model-value=\"onMinutes\" /><span class=\"tag tag-simulated\" v-if=\"!isObs\">养殖站点仿真</span><span class=\"tag\" v-else>历史观测 · 非实时</span><template v-if=\"metric!=='compare'\"><button v-for=\"item in waterMetrics\" :key=\"item.key\" :class=\"{primary:metric===item.key}\" @click=\"selectMetric(item.key)\">{{item.label}}</button><button @click=\"selectMetric('compare')\">多指标对照</button></template><template v-else><button @click=\"selectMetric('water_temp')\">返回单指标</button><label v-for=\"item in waterMetrics.filter(x=>x.key!=='ph')\" :key=\"item.key\" class=\"small\"><input type=\"checkbox\" v-model=\"show[item.key]\" /> {{item.label}}</label></template></div><div class=\"show-note\">{{siteName()}} · {{srcLabel}} · <template v-if=\"isObs\">数据时间范围 {{obsRangeText()}}</template><template v-else>观测时间 {{last.ts?fmtTs(last.ts):'—'}}</template><template v-if=\"isObs&&pageKey==='water'\"> · 溶氧 / pH 月度观测范围 {{wqRangeText}}</template></div><div v-if=\"!followCage\" class=\"show-note\">正在查看其他海域。<button @click=\"backToCage\">回到当前网箱所在海域</button></div><div v-if=\"topAlarm\" class=\"show-note\"><b>本时段命中规则：{{topAlarm.hit.rule_name}}</b> · {{topAlarm.hit.trigger_value}} / 阈值 {{topAlarm.hit.trigger_threshold}} · <a href=\"#/mgmt/alarm\">追溯完整链路 →</a></div><show-screens :labels=\"['水质观测','异常事件']\"><template #default=\"{screen}\"><div v-show=\"screen===0\" class=\"show-env-stage\"><section class=\"card env-chart\"><div class=\"card-title\">选中指标趋势<span class=\"env-hint\">滚轮缩放 / 框选 · 圆点为异常命中点</span></div><div v-if=\"isObs&&(metric==='dissolved_oxygen'||metric==='ph')\" class=\"show-note\">月度点位均值 · {{wqNow.ts?fmtTs(wqNow.ts):'—'}} · 当前值 {{metric==='ph'?(wqNow.ph??'—'):(wqNow.dissolved_oxygen??'—')}}，没有小时序列。</div><div v-show=\"!(isObs&&(metric==='dissolved_oxygen'||metric==='ph'))\" ref=\"chartEl\" class=\"chart\"></div></section><section class=\"card env-model\"><div class=\"env-label\">水质探头与测点</div><scene-slot focus=\"water\" /><a class=\"env-link\" href=\"#/mgmt/alarm\">告警追溯 →</a></section></div><div v-show=\"screen===1\" class=\"show-env-events\" style=\"display:flex;min-height:0\"><div class=\"card\"><div class=\"card-title\">水质事件 / 告警 · {{events.length}} 条</div><paged-records :items=\"events\"><template #default=\"{rows}\"><div v-if=\"!rows.length\" class=\"empty\">本时段无越限事件</div><button v-for=\"it in rows\" :key=\"it.id\" class=\"row-item\" @click=\"picked=it\" style=\"text-align:left;width:100%\"><span class=\"t\">{{time(it.ts)}}</span><span class=\"dot\" :class=\"lvClass(it.level)\"></span><span class=\"d\">{{it.text}}</span></button></template></paged-records><div v-if=\"picked\" class=\"show-note\">已选事件：{{picked.text}}</div></div></div><div v-show=\"screen===0\" class=\"show-stats\">",
       "    <stat-card class=\"is-primary\" name=\"水温\" field=\"water_temp\" unit=\"℃\" :value=\"last.water_temp\"",
       "               :note=\"isObs ? '该台站本期未测这项' : ''\"",
       "               :quality=\"last.quality\" :ts=\"last.ts\" />",
@@ -1734,6 +1759,7 @@
       "  </div>",
       "",
       "  </secondary-page>",
+      "<secondary-page v-if=\"isObs\" title=\"水质来源与参考点位\"><div class=\"show-body\"><section class=\"card\"><div class=\"card-title\">水温与月度水质分源</div><p class=\"show-note\">水温来自所选海洋站的逐时历史观测；溶解氧、pH来自生态环境部附近监测点的月度均值，非网箱现场实测，不插值补缺月。</p><p class=\"show-note\">以参考站为中心，半径 {{waterReference.radius_km || '—'}} km 内 {{waterReference.n_sites || 0}} 个监测点；距离为点位到参考站的距离，并非到网箱的距离。月度范围 {{(waterReference.months || []).join(' ~ ') || '—'}}。</p><a :href=\"waterReference.source_url\" target=\"_blank\" rel=\"noopener\">国家海洋环境监测中心 · 水质原始来源</a><paged-records :items=\"waterReference.sites || []\" :size=\"6\"><template #default=\"{rows}\"><table class=\"dt\"><thead><tr><th>监测点</th><th>海区 / 城市</th><th>距参考站</th><th>坐标</th></tr></thead><tbody><tr v-for=\"r in rows\" :key=\"r.site\"><td>{{r.site}}</td><td>{{r.sea}} / {{r.city}}</td><td>{{r.dist_km}} km</td><td>{{r.lon}}° / {{r.lat}}°</td></tr></tbody></table></template></paged-records></section></div></secondary-page>",
       "<secondary-page title=\"环境阈值总表\"><threshold-table owner=\"环境\" /></secondary-page></div></div></div>"
     ].join('\n')
   };

@@ -80,9 +80,9 @@ async function main() {
   assert(Math.abs(model.geometry(farm.cages[1].spec, 'cage_02').depth / 5 - 6 / 18) < 1e-12);
   const dims = { x: 10, y: 10, z: 8 };
   const point = (x, y, z) => Array.from(model.mapPoint({ x, y, z }, dims, size));
-  assert.deepEqual(point(0, 0, 0), [-2.15, -0.24, -2.18]);
-  assert.deepEqual(point(10, 10, 8), [2.15, -1.5, 2.18]);
-  assert.deepEqual(point(5, 5, 4), [0, -0.87, 0]);
+  assert.deepEqual(point(0, 0, 0), [-2.5, 0, -2.5]);
+  assert.deepEqual(point(10, 10, 8), [2.5, -1.5, 2.5]);
+  assert.deepEqual(point(5, 5, 4), [0, -0.75, 0]);
   assert.equal(model.mapPoint({ x: null, y: 1, z: 1 }, dims, size), null);
   assert.equal(model.mapPoint({ x: 1, y: 1, z: 1 }, { x: 0, y: 10, z: 8 }, size), null);
   const c = canvas(), viewer = model.mount(c);
@@ -140,6 +140,7 @@ async function main() {
   assert.equal(mountCount, 1, 'domain pages must not create independent model canvases');
   assert.equal(timers.size, 1);
   let request = requests.filter(r => r.url.includes('positions3d')).pop();
+  assert(request.url.includes('cage_id=cage_02'), '3D heatmap requests its current cage');
   request.reply({ offline: false, data: { dims, points: [{ x: 5, y: 5, z: 4, s: 2 }] } });
   await settle(); assert.equal(data.pointCount, 1);
   // Ignore a response from the previous cage, and clear old points immediately.
@@ -149,6 +150,7 @@ async function main() {
   stale.reply({ offline: false, data: { dims, points: [{ x: 1, y: 1, z: 1 }] } });
   await settle(); assert.equal(data.pointCount, 0);
   request = requests.filter(r => r.url.includes('positions3d')).pop();
+  assert(request.url.includes('cage_id=cage_01'), '3D heatmap sends the new cage after a switch');
   request.reply({ offline: true, data: null }); await settle();
   assert.equal(data.offline3d, true); assert.equal(data.pointCount, 0);
   data.switchView('2d'); assert.equal(timers.size, 0); assert.equal(frames.size, 0);

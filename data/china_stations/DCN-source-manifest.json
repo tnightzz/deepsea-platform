@@ -1,0 +1,96 @@
+{
+  "retrieved_date": "2026-10-30",
+  "source_url": "https://mds.nmdis.org.cn/pages/dataViewDetail.html?dataSetId=4",
+  "identifier": "CSTR:13452.11.1.01.001.2.00081.1",
+  "station_id": "DCN",
+  "site_id": "site_03",
+  "reference_note": "大陈外海场景的海域参考台站，非网箱现场实测",
+  "files": [
+    {
+      "name": "DCN2407.txt",
+      "uuid": "4cf320ff88024b58897be165c106a6c5",
+      "sha256": "5373f31a208bf54c496985d27a025235c32cc9333d3e5fba8085530bd6575297",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2408.txt",
+      "uuid": "b452a602a1094137909a290b626d54fb",
+      "sha256": "d97492169e17f6ab91a2235f67227140e0636fba8f43d53a0ddd5ede92e06e58",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2409.txt",
+      "uuid": "2c646a892c9b4b288558f31c59048fd5",
+      "sha256": "0583b8eda80fe0e58408e5d13174cd31711e9f3ed4c38d077a636e24627843db",
+      "bytes": 78480
+    },
+    {
+      "name": "DCN2410.txt",
+      "uuid": "cc9fb1b04d5048eab6307648b3982f06",
+      "sha256": "5cb9d69eaa375ece587b01b34d15aaacc5d3084edc22e728011d9bc92c327880",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2411.txt",
+      "uuid": "a7901c597f2e4609b56325b43e56cd3b",
+      "sha256": "f1c3c8352a3d8a5d1c7f4adf79c46922b70f56d90f9582dd020067730d7ae7fa",
+      "bytes": 78480
+    },
+    {
+      "name": "DCN2412.txt",
+      "uuid": "a5238c50d31947c0a4930045163b4b63",
+      "sha256": "6c9434bdc61d899b99ca24dfb312291f5ed9d575e4aa65488f03226f6f37b7f8",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2501.txt",
+      "uuid": "b691032700224814bbd8ee7fb6f45757",
+      "sha256": "e649be650befb243772635871c664d6b0f1020cf5443aaf76c8d24a7aa37228e",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2502.txt",
+      "uuid": "8c861f1895d446558fa84931e982bb25",
+      "sha256": "281404674b3d8eaf7a209195806d0079233781b81bc483de2973a3b77e402d28",
+      "bytes": 73248
+    },
+    {
+      "name": "DCN2503.txt",
+      "uuid": "a1c0ba08de37473887eef1ae03c4fad3",
+      "sha256": "bd86dd7fc8e170336d41211e69999325e413a69765a52e972718b42810d467f3",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2504.txt",
+      "uuid": "486ba1f281334d49b331b696379c0430",
+      "sha256": "592d5769d9c4631dedccb156ff84582f24ac0e572183db1be0e94c7624942f23",
+      "bytes": 78480
+    },
+    {
+      "name": "DCN2505.txt",
+      "uuid": "7e446880ac6345c284105740834723e1",
+      "sha256": "02d1819472365c97bad72968e82d9281e025a1b0ddaf630333a1ac4eb172afb8",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2506.txt",
+      "uuid": "c31a6b45d5a8444eb655b434ad363fa7",
+      "sha256": "3d40d4452f837259965623387f790fd3bd5a029f8d469da9b463a1f9a141f9ab",
+      "bytes": 78480
+    },
+    {
+      "name": "DCN2507.txt",
+      "uuid": "e25f3a0029564593a4bb1f6a52030304",
+      "sha256": "92277691b84ce2eb294e3d1e96cd288fe064eaf5f89ee8ee998dc02b58ef72e4",
+      "bytes": 81096
+    },
+    {
+      "name": "DCN2508.txt",
+      "uuid": "368014e825a749a78eb09cb5be209102",
+      "sha256": "1c76ba0daa2a31993cba5a708238e99bdb0385a1b470be765b60516fd1be6191",
+      "bytes": 81096
+    }
+  ],
+  "records": 10248,
+  "missing_wave_height": 291
+}

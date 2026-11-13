@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('fs'),path=require('path')
 const root=path.resolve(__dirname,'..','frontend');
 let current='cage_01';const pending=[];
 const cages=['cage_01','cage_02'].map((cage_id,i)=>({cage_id,site_id:i?'site_03':'site_04',stocking:{date:new Date(Date.now()-100*86400000).toISOString(),plan_harvest:new Date(Date.now()+100*86400000).toISOString(),init_size_g:100,target_size_g:1000}}));
-const ctx={console,Date,Math,Number,Set,Map,localStorage:{getItem:()=>null},C:{},CurrentCage:{get:()=>current},API:{farm:()=>({cages}),fish:(minutes,id)=>({then:cb=>pending.push({id,cb})}),resolve:(value,cb)=>value&&value.then?value.then(cb):cb(value)}};
+const ctx={console,Date,Math,Number,Set,Map,localStorage:{getItem:()=>null},C:{},CurrentCage:{get:()=>current},API:{farm:()=>({cages}),fishGrowth:id=>({then:cb=>pending.push({id,cb})}),resolve:(value,cb)=>value&&value.then?value.then(cb):cb(value)}};
 ctx.window=ctx;vm.createContext(ctx);for(const file of ['exhibit.js','pages/fish.js'])vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),ctx);
 function instance(def){const x=Object.assign({},def.data(),def.methods);for(const [key,fn]of Object.entries(def.computed||{}))Object.defineProperty(x,key,{get:()=>fn.call(x)});return x;}
 const growth=instance(ctx.PAGES['/fish/growth']);growth.farm={cages};growth.live=[{avg_weight_g:550,ts:Date.now()}];

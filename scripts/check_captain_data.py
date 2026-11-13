@@ -33,29 +33,61 @@ def check_current_cages(base):
     sites = {s["site_id"]: s for s in get(base, "/api/sites")}
     temp_db = {s["species_cn"]: s for s in get(base, "/api/species/temp")["species"]}
     problems, details = [], []
-    mapping = {"cage_01": ("site_04", "SSN", 20, 20, 6),
-               "cage_02": ("site_03", "XMD", 18, 18, 6)}
+    mapping = {"cage_01": ("site_04", "SSN", "square", "大黄鱼", 18, 18, 6),
+               "cage_02": ("site_03", "DCN", "hexagon", "许氏平鲉", 40 / math.sqrt(3), 20, 6)}
     if set(cages) != set(mapping) or set(expected) != set(mapping):
         problems.append("磁盘和 /api/farm 必须恰有 cage_01/cage_02")
     sim = next((s for s in live["sites"] if s["site_id"] == "site_01"), {})
     if sim.get("site_name") != "仿真演示站点" or sim.get("cages") or sim.get("kind") != "farm":
         problems.append("site_01 必须保留为无养殖网箱的仿真演示站点")
     signatures = []
-    for cid, (sid, station, length, width, depth) in mapping.items():
+    for cid, (sid, station, shape, species, length, width, depth) in mapping.items():
         cage = cages.get(cid, {})
         spec = cage.get("spec") or {}
         if cage != expected.get(cid):
             problems.append(cid + " /api/farm 与磁盘配置/台账不一致")
         if cage.get("site_id") != sid or sites.get(sid, {}).get("station_id") != station:
             problems.append(cid + " 所在站点/台站映射错误")
-        if (spec.get("shape"), spec.get("length_m"), spec.get("width_m"), spec.get("depth_m")) != ("桁架式", length, width, depth):
-            problems.append(cid + " 桁架形状或长宽深错误")
+        if (spec.get("shape"), spec.get("plan_shape"), cage.get("species")) != ("桁架式", shape, species):
+            problems.append(cid + " 结构类型、平面形状或鱼种错误")
+        if any(not isinstance(spec.get(key), (int, float)) or not math.isclose(spec[key], value)
+               for key, value in (("length_m", length), ("width_m", width), ("depth_m", depth))):
+            problems.append(cid + " 外接范围或养殖水深错误")
         volume = spec.get("effective_volume_m3")
-        if volume != length * width * depth:
-            problems.append(cid + " 体积不是长×宽×养殖水深")
+        area = math.sqrt(3) / 2 * width ** 2 if shape == "hexagon" else length * width
+        perimeter = 6 * width / math.sqrt(3) if shape == "hexagon" else 2 * (length + width)
+        for key, value in (("effective_volume_m3", area * depth), ("circumference_m", perimeter)):
+            if not isinstance(spec.get(key), (int, float)) or not math.isclose(spec[key], value):
+                problems.append(cid + " " + key + " 未按平面形状计算")
+        if shape == "hexagon" and any(not isinstance(spec.get(key), (int, float)) or not math.isclose(spec[key], value)
+                                     for key, value in (("across_flats_m", 20), ("side_m", 20 / math.sqrt(3)))):
+            problems.append(cid + " 正六角对边距或边长错误")
         thresholds = temp_db.get(cage.get("species"), {})
         if any(sites.get(sid, {}).get(key) != thresholds.get(key) for key in THRESHOLDS):
             problems.append(cid + " /api/sites 阈值与鱼种温度库不一致")
+        cloud = get(base, "/api/fish/positions3d?cage_id=" + cid).get("data") or {}
+        if (cloud.get("cage_id"), cloud.get("species"), cloud.get("plan_shape")) != (cid, species, shape):
+            problems.append(cid + " 点云网箱、鱼种或平面形状错误")
+        dims = cloud.get("dims") or {}
+        if dims != {"x": spec.get("length_m"), "y": spec.get("width_m"), "z": spec.get("depth_m")}:
+            problems.append(cid + " 点云范围与台账不一致")
+        points = cloud.get("points") or []
+        if not points:
+            problems.append(cid + " 正常场景点云为空")
+        for point in points:
+            x, y, z = (point.get(key) for key in ("x", "y", "z"))
+            if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in (x, y, z)):
+                problems.append(cid + " 点云坐标不是有限数字")
+                break
+            if not (0 <= x <= length and 0 <= y <= width and 0 <= z <= depth) or (
+                    shape == "hexagon" and abs(x - length / 2) + abs(y - width / 2) / math.sqrt(3) > length / 2 + 1e-9):
+                problems.append(cid + " 点云越出养殖水体")
+                break
+        for device in farm.devices(cid):
+            target_depth = 3 if device.get("metric") == "light_dimming" else (
+                5 if cid == "cage_02" and device.get("metric") in ("water_temp", "dissolved_oxygen") else None)
+            if target_depth and device.get("location") != "%s · 水下 %s m" % (cid, target_depth):
+                problems.append(device["device_id"] + " 安装深度与演示设计不一致")
         env = get(base, "/api/env?" + urllib.parse.urlencode({"site_id": sid, "minutes": 120}))
         station_data = nmdis.load_station(station)
         fast = env.get("fast") or []
@@ -82,8 +114,9 @@ def check_current_cages(base):
             problems.append(cid + " 结构序列缺失或网箱/站点串箱")
         else:
             signatures.append([(r.get("tilt_pitch"), r.get("anchor_tension")) for r in struct])
-        details.append("%s→%s/%s；%s×%s×%s=%s m³；台账 %s 尾；鱼密度 %s 尾/m³" % (
-            cid, sid, station, length, width, depth, volume, count,
+        geometry = "正六角对边距 %s m×水深 %s m" % (width, depth) if shape == "hexagon" else "方形 %s×%s×%s m" % (length, width, depth)
+        details.append("%s→%s/%s；%s，水体 %s m³；台账 %s 尾；鱼密度 %s 尾/m³" % (
+            cid, sid, station, geometry, volume, count,
             fish[-1].get("fish_density") if fish else "—"))
     if len(signatures) == 2 and signatures[0] == signatures[1]:
         problems.append("两箱结构响应完全相同，疑似忽略 cage_id")
@@ -161,7 +194,7 @@ def temperature_report():
     env_js = (ROOT / "frontend" / "pages" / "env.js").read_text(encoding="utf-8")
     if "if (w >= 28.0)" in env_js:
         lines += ["图表限制：env.js 水温异常点/参考线仍使用25.5/28℃高温固定值，"
-                  "尚未反映低温和黑鲷专属线；实际告警规则已经按鱼种四线判定，图表与规则的展示仍需统一。", ""]
+                  "尚未反映低温和鱼种专属线；实际告警规则已经按鱼种四线判定，图表与规则的展示仍需统一。", ""]
     return "\n".join(lines)
 
 

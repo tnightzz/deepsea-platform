@@ -225,7 +225,8 @@ def check_2(base):
     threshold_ok = (( "28.0" in pages or "28" in pages)
                      and ("水温上限" in pages)
                      and ("#/mgmt/alarm" in pages)
-                     and ("① 哪条数据触发的" in pages))
+                     and ("哪条数据触发" in pages)
+                     and ("trigger_snapshot" in pages))
 
     # ⑤ 告警可追溯：按编号能反查到「哪条数据触发的、命中哪条规则」
     alarm_ok, sample = False, "—"

@@ -68,7 +68,7 @@ class TestHistorical(unittest.TestCase):
 
     def _nmdis_cache(self):
         return {
-            "meta": {"station_id": "XMD", "station_cn": "小麦岛", "sea": "黄海",
+            "meta": {"station_id": "DCN", "station_cn": "大陈参考站", "sea": "东海",
                      "source": "NMDC 中国台站观测数据"},
             "records": [
                 {"ts": 1000, "ts_local": "2026-10-01 00:00",
@@ -101,10 +101,10 @@ class TestHistorical(unittest.TestCase):
         self.assertEqual(out["count"], 0, msg="无入库数据返回空，不编造数据")
 
     def test_obs_real_china_station(self):
-        """真实验证（问题三修复）：site_03 小麦岛在入库区间内能查到真实公开数据"""
+        """真实验证（问题三修复）：site_03 大陈参考站在入库区间内能查到真实公开数据"""
         # 2024-07-01 00:00（北京） ~ 2025-08-31 23:00（北京）
         out = env.historical("site_03", 1719763200000, 1756652400000)
-        self.assertGreater(out["count"], 0, msg="小麦岛入库区间内应返回真实数据")
+        self.assertGreater(out["count"], 0, msg="大陈参考站入库区间内应返回真实数据")
         self.assertIn("NMDC", out["source_detail"], msg="来源标注为中国近海台站实测")
         r0 = out["records"][0]
         self.assertTrue(any(r0.get(f) is not None for f in
@@ -151,11 +151,11 @@ class TestNdbcRanges(unittest.TestCase):
         return [
             {"site_id": "site_01", "kind": "farm"},
             {"site_id": "site_02", "kind": "obs", "station_id": "ZFD"},
-            {"site_id": "site_03", "kind": "obs", "station_id": "XMD"},
+            {"site_id": "site_03", "kind": "obs", "station_id": "DCN"},
         ]
 
     def _nmdis_cache(self):
-        return {"meta": {"station_cn": "小麦岛", "sea": "黄海"},
+        return {"meta": {"station_cn": "大陈参考站", "sea": "东海"},
                 "records": [
                     {"ts": 1000, "ts_local": "2026-01-01 00:00"},
                     {"ts": 2000, "ts_local": "2026-01-01 01:00"},

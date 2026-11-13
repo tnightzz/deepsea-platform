@@ -25,25 +25,8 @@
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   }
-  function geometry(spec, cageId) {
-    const length = validNumber(spec && spec.length_m);
-    const breadth = validNumber(spec && spec.width_m);
-    const depth = validNumber(spec && spec.depth_m);
-    const confirmed = spec && spec.shape === '桁架式' && length > 0 && breadth > 0 && depth > 0;
-    const second = cageId === 'cage_02';
-    return { length: 5, breadth: confirmed ? 5 * breadth / length : second ? 2.55 : 2,
-      depth: confirmed ? 5 * depth / length : second ? 1.48 : 1.65 };
-  }
-  // 接口 X/Y 为水平坐标、Z 为向下水深；映射到同一内侧网衣，不改变状态颜色。
-  function mapPoint(point, dims, size) {
-    if (!point || !dims || !['x', 'y', 'z'].every(function (key) {
-      return validNumber(point[key]) !== null && validNumber(dims[key]) > 0;
-    })) return null;
-    function fraction(key) { return Math.max(0, Math.min(1, point[key] / dims[key])); }
-    return [(fraction('x') * 2 - 1) * (size.length / 2 - 0.35),
-      -0.24 - fraction('z') * (size.depth - 0.24),
-      (fraction('y') * 2 - 1) * (size.breadth / 2 - 0.32)];
-  }
+  const geometry = global.StructTrussCage.geometry;
+  const mapPoint = global.StructTrussCage.mapPoint;
   if (global.document && !global.document.getElementById('struct-truss-standalone-style')) {
     const style = global.document.createElement('style');
     style.id = 'struct-truss-standalone-style';
@@ -62,6 +45,7 @@
       setMooringView: function () {}, dispose: function () {} };
     const view = { yaw: 0.65, pitch: 0.46, zoom: 1, mooring: false,
                    length: 5, breadth: 2, depth: 1.65, variant: 'cage_01' };
+    Object.assign(view, geometry(null, 'cage_01'));
     const reducedMotion = global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let width = 0, height = 0, raf = 0, previous = 0, dragging = false, lastX = 0, lastY = 0;
     let specKey = '', cy = 1, sy = 0, cp = 1, sp = 0;
@@ -73,6 +57,7 @@
 
     function setPointCloud(data) {
       cloudData = data;
+      if (data && data.cage_id && data.cage_id !== view.variant) { cloud = []; return; }
       cloud = data && Array.isArray(data.points) ? data.points.map(function (point, index) {
         const target = mapPoint(point, data.dims, view);
         return target ? { target: target, position: cloud[index] ? cloud[index].position : target.slice(),
@@ -84,7 +69,7 @@
       const length = validNumber(spec && spec.length_m);
       const breadth = validNumber(spec && spec.width_m);
       const depth = validNumber(spec && spec.depth_m);
-      const key = [cageId, spec && spec.shape, length, breadth, depth].join(':');
+      const key = [cageId, spec && spec.shape, spec && spec.plan_shape, spec && spec.across_flats_m, length, breadth, depth].join(':');
       if (key === specKey) return;
       specKey = key;
       view.variant = cageId === 'cage_02' ? 'cage_02' : 'cage_01';
@@ -114,12 +99,22 @@
       return {x:width*.5+x*scale,y:height*view.centerY-raised*scale,z:distance};
     }
     function devicePositions() {
-      const edge=view.breadth/2-.17;
-      return {water:[-1.35,-.1,edge],feed:[1.35,.95,edge],stock:[0,-.85,0],light:[-1.15,1.26,-edge],crane:[1.85,.65,-edge],camera:[.1,-.48,-edge+.12],energy:[.10,.83,edge],battery:[.84,.66,edge],tension:[-view.length/2-.07,-.32,-view.breadth/2-.07],pose:[-view.length/2+.11,.76,0],net:[view.length/2-.35,-.8,0]};
+      const u=view.scale,edge=view.breadth/2,second=view.variant==='cage_02',deck=.34;
+      const feedX=second?-.65:1.1,feedZ=(second?-1:1)*(edge+u*1.5);
+      const water=[second?-.7:-1.3,-(second?5:3)*u,edge*.6];
+      const light=[second?.55:-1.1,-3*u,-edge*.35];
+      const crane=[second?-.9:.9,deck+.35*u,-edge-1.5*u];
+      return {water:water,oxygen:[water[0]+.2*u,water[1],water[2]],water_mount:[water[0],deck,edge],
+        feed:[feedX,deck+.508*u,feedZ],feed_outlet:[feedX,-(second?4.5:.5)*u,(second?-1:1)*(edge-.5*u)],
+        stock:[0,-view.depth*(second?.86:.62),0],light:light,light_secondary:[-light[0],light[1],light[2]],light_mount:[light[0],deck,-edge],
+        crane:crane,crane_secondary:[-crane[0],crane[1],crane[2]],camera:[second?.6:.4,-(second?5:3.2)*u,-edge*.6],camera_mount:[0,deck,-edge],
+        energy:[-.5,deck+.15*u,edge+1.6*u],battery:[.2,deck+.4*u,edge+1.6*u],
+        tension:[view.outer[0][0],-.32,view.outer[0][1]],pose:[view.outer[2][0],deck+.025*u,view.outer[2][1]],
+        net:[view.inner[1][0]*.96,-view.depth*.5,view.inner[1][1]*.96]};
     }
     function preset(name) {
-      const source=devicePositions()[name]||[0,-view.depth*.46,0],point=source.slice();if(name==='light'){point[1]-=.36;point[2]+=.24}
-      const settings={overview:[.65,.46,1,.46,1],water:[.18,.30,1.55,.34,.17],feed:[2.45,.30,3.2,.40,.16],stock:[.65,.40,1.1,.46,.8],light:[.5,.28,2.25,.53,.30],crane:[2.70,.42,3.1,.52,.30],camera:[.55,.27,3.3,.52,.25],energy:[2.2,.45,2.6,.52,.32],tension:[.65,.34,3,.51,.3],pose:[.65,.30,3.6,.52,.3],net:[2.7,.25,2.6,.5,.35],mooring:[.65,1.02,.60,.46,1]}[name]||[.65,.46,1,.46,1];
+      const source=devicePositions()[name]||[0,-view.depth*.46,0],point=source.slice();
+      const settings={overview:[.65,.46,1,.46,1],water:[.18,.30,10,.34,.17],feed:[2.45,.30,3.2,.40,.16],stock:[.65,.40,1.1,.46,.8],light:[.5,.28,12,.53,.30],crane:[2.70,.42,3.1,.52,.30],camera:[.55,.27,30,.52,.25],energy:[2.2,.45,2.6,.52,.32],tension:[.65,.34,3,.51,.3],pose:[.65,.30,3.6,.52,.3],net:[2.7,.25,2.6,.5,.35],mooring:[.65,1.02,.60,.46,1]}[name]||[.65,.46,1,.46,1];
       return {tx:point[0],ty:point[1],tz:point[2],yaw:settings[0],pitch:settings[1],zoom:settings[2],centerY:settings[3],context:settings[4]};
     }
     function viewportRect() {
@@ -157,7 +152,7 @@
       applyViewport(flight.rectFrom.map((value,i)=>value+(flight.rectTo[i]-value)*ease));
       if(t===1){if(!flight.cameraCancelled)Object.assign(view,flight.to);flight=null}
     }
-    Object.keys(devicePositions()).filter(k=>!['stock','battery'].includes(k)).concat(['light-secondary','crane-secondary']).forEach(k=>emphasis[k]=0);
+    Object.keys(global.MarineEquipmentSpec).filter(k=>k!=='battery').concat(['net','light-secondary','crane-secondary']).forEach(k=>emphasis[k]=0);
     function equipmentColor(color) {
       if(!paintEmphasis||!/^#[\da-f]{6}$/i.test(color))return color;
       const target=paintEmphasis>0?[190,247,244]:[15,43,57],amount=Math.abs(paintEmphasis)*(paintEmphasis>0?.32:.72);
@@ -256,11 +251,8 @@
       if (!width || !height) resize();
       cy = Math.cos(view.yaw); sy = Math.sin(view.yaw);
       cp = Math.cos(view.pitch); sp = Math.sin(view.pitch);
-      const halfL = view.length / 2, halfB = view.breadth / 2;
-      const innerL = halfL - 0.35, innerB = halfB - 0.32;
+      const outer = view.outer, inner = view.inner;
       const top = 0.34, lower = -0.24, bottom = -view.depth;
-      const outer = [[-halfL, -halfB], [halfL, -halfB], [halfL, halfB], [-halfL, halfB]];
-      const inner = [[-innerL, -innerB], [innerL, -innerB], [innerL, innerB], [-innerL, innerB]];
       const parts = [];
       function clipAtWater(points,below){
         const result=[];
@@ -299,17 +291,21 @@
         }
       }
       // 网衣挂在内侧框架上，四个侧面各成一片，底面封闭。
-      for (let side = 0; side < 4; side++) {
-        const a = inner[side], b = inner[(side + 1) % 4];
-        mesh([[a[0], lower, a[1]], [b[0], lower, b[1]],
+      for (let side = 0; side < inner.length; side++) {
+        const a = inner[side], b = inner[(side + 1) % inner.length];
+        mesh([[a[0], top, a[1]], [b[0], top, b[1]],
               [b[0], bottom, b[1]], [a[0], bottom, a[1]]], side % 2 ? 7 : 11, 9);
       }
-      mesh(inner.map(function (p) { return [p[0], bottom, p[1]]; }), 11, 7);
+      if (inner.length === 4) mesh(inner.map(function (p) { return [p[0], bottom, p[1]]; }), 11, 7);
+      else inner.forEach(function (p, i) {
+        const q = inner[(i+1)%inner.length];
+        mesh([[0,bottom,0],[p[0],bottom,p[1]],[q[0],bottom,q[1]],[0,bottom,0]],7,7);
+      });
 
       // 上下弦、立杆、斜撑构成连续的空间钢桁架，不再使用圆形浮圈算法。
-      for (let side = 0; side < 4; side++) {
-        const a = outer[side], b = outer[(side + 1) % 4];
-        const ia = inner[side], ib = inner[(side + 1) % 4];
+      for (let side = 0; side < inner.length; side++) {
+        const a = outer[side], b = outer[(side + 1) % inner.length];
+        const ia = inner[side], ib = inner[(side + 1) % inner.length];
         const bays = side % 2 ? (view.variant === 'cage_02' ? 4 : 3) :
           (view.variant === 'cage_02' ? 6 : 5);
         panel([[a[0], top, a[1]], [b[0], top, b[1]],
@@ -318,6 +314,10 @@
           const p = [mix(a, b, bay / bays), mix(a, b, (bay + 1) / bays)];
           const x = p[0], y = p[1];
           const netAtBay = mix(ia, ib, bay / bays);
+          const innerNext = mix(ia, ib, (bay+1)/bays);
+          member([netAtBay[0],top,netAtBay[1]],[netAtBay[0],top+view.railHeight,netAtBay[1]],'rail');
+          member([netAtBay[0],top+view.railHeight,netAtBay[1]],[innerNext[0],top+view.railHeight,innerNext[1]],'rail');
+          member([x[0],top+view.railHeight/2,x[1]],[y[0],top+view.railHeight/2,y[1]],'rail');
           member([x[0], top, x[1]], [y[0], top, y[1]], 'main');
           member([x[0], lower, x[1]], [y[0], lower, y[1]], 'main');
           member([x[0], bottom, x[1]], [y[0], bottom, y[1]], 'brace');
@@ -325,22 +325,31 @@
           member([x[0], top, x[1]], [y[0], lower, y[1]], 'brace');
           if (bay % 2 === 0) member([x[0], lower, x[1]], [y[0], bottom, y[1]], 'brace');
           // 工作通道外缘的护栏，以及网衣边纲与内框之间的连接线。
-          member([x[0], top, x[1]], [x[0], top + 0.34, x[1]], 'rail');
-          member([x[0], top + 0.34, x[1]], [y[0], top + 0.34, y[1]], 'rail');
+          member([x[0], top, x[1]], [x[0], top + view.railHeight, x[1]], 'rail');
+          member([x[0], top + view.railHeight, x[1]], [y[0], top + view.railHeight, y[1]], 'rail');
           member([x[0], lower, x[1]],
                  [netAtBay[0], lower - 0.05, netAtBay[1]], 'netTie');
         }
         member([b[0], top, b[1]], [b[0], bottom, b[1]], 'main');
-        member([b[0], top, b[1]], [b[0], top + 0.34, b[1]], 'rail');
+        member([b[0], top, b[1]], [b[0], top + view.railHeight, b[1]], 'rail');
         member([ia[0], top, ia[1]], [ib[0], top, ib[1]], 'main');
         member([a[0], top, a[1]], [ia[0], top, ia[1]], 'brace');
-      }
-      // 两侧浮力构件和立柱只表达构造，不代表真实浮力参数。
-      [-halfB, halfB].forEach(function (z) {
-        member([-halfL, 0.08, z], [halfL, 0.08, z], 'float');
-        [-halfL, -halfL / 3, halfL / 3, halfL].forEach(function (x) {
-          member([x, top, z], [x, -0.64, z], 'floatColumn');
+        // Rail posts <= 1 m, two middle rails and a 0.10 m toe board.
+        const posts=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/view.scale);
+        [[a,b],[ia,ib]].forEach(function(edge){
+          for(let j=0;j<=posts;j++){
+            const p=mix(edge[0],edge[1],j/posts);
+            member([p[0],top,p[1]],[p[0],top+view.railHeight,p[1]],'rail');
+          }
+          [.4,.8,1.2].forEach(function(h){member([edge[0][0],top+h*view.scale,edge[0][1]],[edge[1][0],top+h*view.scale,edge[1][1]],'rail')});
+          panel([[edge[0][0],top+.01*view.scale,edge[0][1]],[edge[1][0],top+.01*view.scale,edge[1][1]],[edge[1][0],top+.11*view.scale,edge[1][1]],[edge[0][0],top+.11*view.scale,edge[0][1]]],'#718994');
         });
+      }
+      // 浮力构件沿各边布置，仅表达结构概念，不代表浮力计算。
+      outer.forEach(function (a, i) {
+        const b = outer[(i+1)%outer.length];
+        member([a[0],.08,a[1]],[b[0],.08,b[1]],'float');
+        [0,.5].forEach(function (t) { const p=mix(a,b,t); member([p[0],top,p[1]],[p[0],-.64,p[1]],'floatColumn'); });
       });
       // 四角导缆点 → 悬垂段 → 海床着地点 → 铺底段 → 锚；曲线只是几何示意。
       outer.forEach(function (corner, index) {
@@ -391,23 +400,8 @@
           polygonPart(points,fills[i],deviceKind,'#416475');
         });
       }
-      const devices=devicePositions(),f=devices.feed,w=devices.water;
-      // Conceptual placement on the walkway; dimensions are visual proportions only.
-      equipmentBox(f[0],.95,f[2],.55,.54,.50);
-      equipmentBox(f[0],1.25,f[2],.62,.06,.57);
-      equipmentBox(f[0],.61,f[2],.25,.15,.26);
-      [-.21,.21].forEach(x=>[-.18,.18].forEach(z=>equipmentBox(f[0]+x,.49,f[2]+z,.045,.27,.045)));
-      equipmentBox(f[0],.39,f[2],.63,.055,.57);
-      equipmentBox(f[0],.59,f[2]-.34,.18,.11,.40);
-      equipmentBox(f[0],.59,f[2]-.545,.14,.07,.006,"opening");
-      equipmentBox(f[0],.98,f[2]-.255,.20,.09,.018,true);
-      deviceKind="water";
-      equipmentBox(w[0],-.12,w[2],.14,.80,.14);
-      equipmentBox(w[0],.32,w[2],.19,.065,.19,true);
-      equipmentBox(w[0],.54,w[2],.025,.38,.025);
-      equipmentBox(w[0],-.59,w[2],.06,.17,.06,true);
-      equipmentBox(w[0],.35,w[2]+.08,.28,.04,.04);
-      global.addMarineEquipment({positions:devices,box:equipmentBox,tube:(a,b,kind)=>member(a,b,kind||'rail',deviceKind),face:(points,fill)=>polygonPart(points,fill,deviceKind,null),kind:name=>deviceKind=name});
+      const devices=devicePositions();
+      global.addMarineEquipment({positions:devices,scale:view.scale,deck:top,edge:view.breadth/2,box:equipmentBox,tube:(a,b,kind)=>member(a,b,kind||'rail',deviceKind),face:(points,fill)=>polygonPart(points,fill,deviceKind,null),kind:name=>deviceKind=name});
       cloud.forEach(function (point,index) {
         point.position.forEach(function(value,i){point.position[i]+=(point.target[i]-value)*.08});
         const q=project(point.position);
@@ -416,7 +410,7 @@
       equipmentCounts={};parts.forEach(p=>{if(p.equipment)equipmentCounts[p.equipment]=(equipmentCounts[p.equipment]||0)+1});
       parts.sort(function (a, b) { return b.z - a.z; });
       layerCounts={above:parts.filter(p=>!p.submerged).length,submerged:parts.filter(p=>p.submerged).length};
-      function paint(part){paintEmphasis=part.equipment?(emphasis[part.equipment]||0):0;ctx.globalAlpha=part.fish?.9*Math.max(.3,view.context):part.equipment?1+Math.min(0,paintEmphasis)*.58:view.context;part.draw();paintEmphasis=0}
+      function paint(part){paintEmphasis=part.equipment?(emphasis[part.equipment]||0):0;ctx.globalAlpha=part.fish?(['overview','stock','mooring'].includes(focusName)?.9*Math.max(.3,view.context):.025):part.equipment?1+Math.min(0,paintEmphasis)*.58:view.context;part.draw();paintEmphasis=0}
       ctx=underContext;ctx.clearRect(0,0,width,height);parts.filter(p=>p.submerged).forEach(paint);ctx.globalAlpha=1;
       ctx=reflectionContext;ctx.clearRect(0,0,width,height);mirrorProjection=true;parts.filter(p=>!p.submerged).forEach(paint);mirrorProjection=false;ctx.globalAlpha=1;
       ctx=mainContext;ctx.globalAlpha=1;
@@ -446,7 +440,7 @@
     function onUp() { dragging = false; }
     function onWheel(event) {
       event.preventDefault();if(flight)flight.cameraCancelled=true;
-      view.zoom=Math.max(.45,Math.min(4.8,view.zoom-event.deltaY*.001));
+      view.zoom=Math.max(.45,Math.min(50,view.zoom*Math.exp(-event.deltaY*.001)));
     }
     function onKey(event) {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
@@ -467,8 +461,8 @@
     return {
       setFocus:setFocus,
       setAnchorListener:fn=>anchorListener=fn,
-      getEquipmentState:()=>({positions:devicePositions(),parts:{...equipmentCounts},emphasis:{...emphasis},opacity:Object.fromEntries(Object.keys(emphasis).map(k=>[k,1+Math.min(0,emphasis[k])*.58]))}),
-      getMarineState:function(){const f=devicePositions().feed;return {water:waterRenderer?'wave-shader':'canvas-fallback',fishCount:cloud.length,fishHeadings:cloud.map((p,i)=>fishHeading(i,reducedMotion?0:previous*.001)),waterLayers:true,layers:{...layerCounts},feeder:{position:f.slice(),outlet:[f[0],.59,f[2]-.545]}}},
+      getEquipmentState:()=>({positions:devicePositions(),scale:view.scale,planShape:view.planShape,inner:view.inner,outer:view.outer,walkway_m:view.clearWalkway/view.scale,deck_width_m:view.walkway/view.scale,rail_height_m:view.railHeight/view.scale,dimensions_m:global.MarineEquipmentSpec,parts:{...equipmentCounts},emphasis:{...emphasis},opacity:Object.fromEntries(Object.keys(emphasis).map(k=>[k,1+Math.min(0,emphasis[k])*.58]))}),
+      getMarineState:function(){const devices=devicePositions();return {water:waterRenderer?'wave-shader':'canvas-fallback',fishCount:cloud.length,fishHeadings:cloud.map((p,i)=>fishHeading(i,reducedMotion?0:previous*.001)),waterLayers:true,layers:{...layerCounts},feeder:{position:devices.feed.slice(),outlet:devices.feed_outlet.slice()}}},
       getCameraState:function(){return {focus:focusName,moving:!!flight&&!flight.cameraCancelled,layoutMoving:!!flight,emphasisMoving:!!emphasisFlight,viewport:viewportRect(),transitionFrom:flight?{tx:flight.from.tx,zoom:flight.from.zoom,yaw:flight.from.yaw}:null,yaw:view.yaw,pitch:view.pitch,zoom:view.zoom,tx:view.tx,ty:view.ty,tz:view.tz,context:view.context}},
       getAnchors:function(){const positions=devicePositions(),out={};Object.keys(positions).forEach(k=>out[k]=project(positions[k]));return out},
       resetView:function(){setFocus(focusName==='mooring'?'overview':focusName,true)},

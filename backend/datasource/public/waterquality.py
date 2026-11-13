@@ -40,7 +40,7 @@ DATA_DIR = os.path.join(ROOT, "data", "water_quality")
 # 平台 site_id → 水质文件名（与台站四站一一对应）
 SITE_FILE = {
     "site_02": "ZFD.json",
-    "site_03": "XMD.json",
+    "site_03": "DCN.json",
     "site_04": "SSN.json",
     "site_05": "ZLG.json",
 }
@@ -173,7 +173,7 @@ if __name__ == "__main__":
                  s["nearest_km"] or -1, s["n_months"], s["months"][0], s["months"][1]))
     print()
     slow, meta = as_slow("site_03", months=6)
-    print("  小麦岛最近 6 个月（slow 序列）:")
+    print("  大陈参考站最近 6 个月（slow 序列）:")
     for r in slow:
         print("    %s  点位%2s  pH=%s  溶解氧=%s mg/L  水质=%s"
               % (r["month"], r.get("n_points"), r.get("ph"),

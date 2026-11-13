@@ -1452,6 +1452,389 @@
       ],
       "source": "生态环境部国家海洋环境监测中心·海水水质监测信息公开系统",
       "source_url": "https://ep.nmemc.org.cn:8888/Water/"
+    },
+    {
+      "station_id": "DCN",
+      "station_cn": "大陈",
+      "sea": "东海",
+      "count": 42,
+      "months": [
+        "2017-05",
+        "2026-07"
+      ],
+      "sites": [
+        {
+          "site": "TZ-DC02",
+          "dist_km": 3.0,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.92,
+          "lat": 28.48
+        },
+        {
+          "site": "ZJ1008",
+          "dist_km": 11.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.99,
+          "lat": 28.43
+        },
+        {
+          "site": "ZJD10008",
+          "dist_km": 11.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.99,
+          "lat": 28.43
+        },
+        {
+          "site": "D33YQ199",
+          "dist_km": 12.5,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.0,
+          "lat": 28.57
+        },
+        {
+          "site": "ZJD10016",
+          "dist_km": 14.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.75,
+          "lat": 28.52
+        },
+        {
+          "site": "ZJ1004",
+          "dist_km": 15.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.92,
+          "lat": 28.64
+        },
+        {
+          "site": "ZJD10004",
+          "dist_km": 15.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.92,
+          "lat": 28.64
+        },
+        {
+          "site": "ZJD10005",
+          "dist_km": 21.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.77,
+          "lat": 28.34
+        },
+        {
+          "site": "ZJD10011",
+          "dist_km": 22.2,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.68,
+          "lat": 28.45
+        },
+        {
+          "site": "ZJ1005",
+          "dist_km": 22.2,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.78,
+          "lat": 28.33
+        },
+        {
+          "site": "ZJD10023",
+          "dist_km": 22.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.69,
+          "lat": 28.58
+        },
+        {
+          "site": "D33YQ200",
+          "dist_km": 24.5,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.88,
+          "lat": 28.28
+        },
+        {
+          "site": "D33YQ198",
+          "dist_km": 25.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.68,
+          "lat": 28.62
+        },
+        {
+          "site": "D33YQ195",
+          "dist_km": 27.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.62,
+          "lat": 28.46
+        },
+        {
+          "site": "ZJD10003",
+          "dist_km": 27.9,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.69,
+          "lat": 28.67
+        },
+        {
+          "site": "ZJ1003",
+          "dist_km": 28.6,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.68,
+          "lat": 28.67
+        },
+        {
+          "site": "ZJD10015",
+          "dist_km": 32.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.99,
+          "lat": 28.78
+        },
+        {
+          "site": "ZJD10019",
+          "dist_km": 32.5,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.23,
+          "lat": 28.46
+        },
+        {
+          "site": "D33YQ182",
+          "dist_km": 33.4,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.99,
+          "lat": 28.79
+        },
+        {
+          "site": "D33YQ188",
+          "dist_km": 33.6,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.24,
+          "lat": 28.55
+        },
+        {
+          "site": "ZJD10002",
+          "dist_km": 33.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.16,
+          "lat": 28.7
+        },
+        {
+          "site": "D33YQ223",
+          "dist_km": 34.0,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.67,
+          "lat": 28.27
+        },
+        {
+          "site": "ZJD10012",
+          "dist_km": 34.0,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.67,
+          "lat": 28.27
+        },
+        {
+          "site": "ZJ1002",
+          "dist_km": 34.4,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.16,
+          "lat": 28.71
+        },
+        {
+          "site": "ZJD10020",
+          "dist_km": 35.0,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.04,
+          "lat": 28.21
+        },
+        {
+          "site": "ZJD10017",
+          "dist_km": 36.0,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.84,
+          "lat": 28.18
+        },
+        {
+          "site": "D33YQ224",
+          "dist_km": 37.1,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.84,
+          "lat": 28.83
+        },
+        {
+          "site": "ZJD10013",
+          "dist_km": 37.1,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.84,
+          "lat": 28.83
+        },
+        {
+          "site": "ZJD10027",
+          "dist_km": 41.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.53,
+          "lat": 28.68
+        },
+        {
+          "site": "D33YQ174",
+          "dist_km": 43.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.28,
+          "lat": 28.71
+        },
+        {
+          "site": "ZJD10018",
+          "dist_km": 45.6,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 122.35,
+          "lat": 28.61
+        },
+        {
+          "site": "D33YQ105",
+          "dist_km": 46.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "宁波",
+          "lon": 122.12,
+          "lat": 28.87
+        },
+        {
+          "site": "ZJD10028",
+          "dist_km": 46.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.68,
+          "lat": 28.87
+        },
+        {
+          "site": "ZJD10009",
+          "dist_km": 47.7,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.72,
+          "lat": 28.1
+        },
+        {
+          "site": "ZJ1009",
+          "dist_km": 48.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.72,
+          "lat": 28.09
+        },
+        {
+          "site": "D33YQ159",
+          "dist_km": 50.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.48,
+          "lat": 28.23
+        },
+        {
+          "site": "ZJD10010",
+          "dist_km": 50.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.48,
+          "lat": 28.23
+        },
+        {
+          "site": "ZJD02008",
+          "dist_km": 51.5,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "宁波",
+          "lon": 122.03,
+          "lat": 28.95
+        },
+        {
+          "site": "ZJ0208",
+          "dist_km": 51.8,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "宁波",
+          "lon": 122.04,
+          "lat": 28.95
+        },
+        {
+          "site": "ZJD10022",
+          "dist_km": 52.3,
+          "sea": "东海",
+          "province": "浙江",
+          "city": "台州",
+          "lon": 121.87,
+          "lat": 28.03
+        }
+      ],
+      "source": "生态环境部国家海洋环境监测中心·海水水质监测信息公开系统",
+      "source_url": "https://ep.nmemc.org.cn:8888/Water/"
     }
+  ],
+  "active_site_stations": {
+    "site_02": "ZFD",
+    "site_03": "DCN",
+    "site_04": "SSN",
+    "site_05": "ZLG"
+  },
+  "archived_station_ids": [
+    "XMD"
   ]
 }

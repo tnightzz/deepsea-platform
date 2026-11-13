@@ -333,6 +333,12 @@
     source: '广东海威农业集团「海威2号」产品介绍；Ocean Engineering, Fish cage and mooring system dynamics using physical and numerical models with field measurements (2003)',
     url: 'https://www.sciencedirect.com/science/article/abs/pii/S0144860902000432'
   };
+  const PLATFORM_MODEL_INFO = {
+    level: '间接支持',
+    text: '项目演示设计：通道铺板宽 1.10 m，两侧预留后净通行宽度 ≥1.00 m；护栏从通道完成面至扶手顶高 1.20 m。参照 GB 4053.3—2009 的 6.1.2 和 5.2：一般通行平台净宽至少 0.75 m，护栏按距基准面高度分级。本项目数值为设计选值，不是海上设施合规证明；设备占道需另设外扩平台。',
+    source: 'GB 4053.3—2009《固定式钢梯及平台安全要求 第3部分：工业防护栏杆及钢平台》6.1.2、5.2；只参照尺寸条款，海上适用性待专项核查',
+    url: 'https://std.samr.gov.cn/gb/search/gbDetailed?id=71F772D7CF85D3A7E05397BE0A0AB82A'
+  };
   PAGES['/struct/alarm'] = {
     data: function () { return { tick: 0, minutes: 60, series: [], netHistory: [], envSeries: [],
       stormDemo: stormDemoActive(), picked: null, cageId: selectedCageId(), requestId: 0 }; },
@@ -665,6 +671,7 @@
     data: function () { return { tick: 0, minutes: 60, series: [], netHistory: [], envSeries: [], cage: null,
       cageId: selectedCageId(), requestId: 0,
       trussModelInfo: TRUSS_MODEL_INFO,
+      platformModelInfo: PLATFORM_MODEL_INFO,
       mooringModelInfo: MOORING_MODEL_INFO, unsub: null, unsubFarm: null }; },
     computed: {
       cageSiteLabel: cageSiteLabel,
@@ -691,10 +698,9 @@
         const cage = this.cage, spec = cage && cage.spec;
         const name = cage && cage.cage_name || '主养网箱';
         if (!spec || spec.shape !== '桁架式') return name + ' · 桁架式结构概念模型';
-        const length = validNumber(spec.length_m), width = validNumber(spec.width_m);
-        const depth = validNumber(spec.depth_m);
-        return name + ' · 桁架式' + (length > 0 && width > 0 && depth > 0 ?
-          ' · ' + length + ' × ' + width + ' × ' + depth + ' m' : ' · 概念模型（无现场尺寸）');
+        const description = global.StructTrussCage && global.StructTrussCage.describeSpec ?
+          global.StructTrussCage.describeSpec(spec) : '规格待加载';
+        return name + ' · 桁架式 · ' + description;
       },
       charts: function () {
         const points = function (field) {
@@ -806,10 +812,10 @@
       "<div v-if=\"screen===0\" class=\"show-row two\">",
       "<div class=\"card\">",
       "<div class=\"card-title\">桁架概念模型</div>",
-      "<help-dot :info=\"trussModelInfo\" label=\"模型依据\" />",
+      "<help-dot :info=\"trussModelInfo\" label=\"模型依据\" /><help-dot :info=\"platformModelInfo\" label=\"通道与护栏设计依据\" />",
       "<p class=\"show-note\">{{ trussModelInfo.text }}</p>",
       "<p class=\"show-note\">{{ trussModelInfo.source }}</p>",
-      "<p class=\"show-note\">钢桁架、工作通道与护栏、浮力立柱、四面侧网、底网与系泊线均用于结构说明；杆件比例、立柱数量与现场尺寸须由设计资料确认。</p>",
+      "<p class=\"show-note\">各侧网与底网封闭养殖水体。通道铺板 1.10 m，两侧预留后净宽 ≥1.0 m；护栏高 1.2 m 为项目设计，参照 GB 4053.3—2009 6.1.2、5.2，不作为海上合规证明。</p>",
       "</div>",
       "<div class=\"card\">",
       "<div class=\"card-title\">当前设施档案</div>",
@@ -917,9 +923,21 @@
 
   PAGES['/struct/detail'] = {
     data: function () { return { tick: 0, minutes: 60, series: [], demoBaseTs: Date.now(), pickedLine: '', pickedArea: '',
-      cageId: selectedCageId(), requestId: 0, unsub: null }; },
+      cageId: selectedCageId(), requestId: 0, unsub: null,
+      alarmId: global.AlarmRoutes && global.AlarmRoutes.focusId || '' }; },
     computed: {
       cageSiteLabel: cageSiteLabel,
+      unresolvedAlarms: function () {
+        this.tick;
+        return API.alarms().filter(function (a) {
+          return a.event_origin !== 'preset_demo' && a.alarm_status !== 'recovered' &&
+            global.AlarmRoutes.pageFor(a) === '/struct/detail';
+        }).sort(function (a, b) { return (RISK_RANK[b.risk_level] || 0) - (RISK_RANK[a.risk_level] || 0) || b.alarm_ts - a.alarm_ts; });
+      },
+      selectedAlarm: function () {
+        const id = this.alarmId;
+        return this.unresolvedAlarms.find(function (a) { return a.alarm_event_id === id; }) || this.unresolvedAlarms[0] || null;
+      },
       last: function () { return this.series.length ? this.series[this.series.length - 1] : {}; },
       anchorLines: function () { return displayMooringLines(this.last); },
       anchorValue: function () { return anchorDisplayValue(this.last); },
@@ -1103,6 +1121,40 @@
       sourceFor: function (field) {
         return (this.displayLast._demoFields || []).indexOf(field) >= 0 ? 'demo' : 'simulated';
       },
+      alarmCage: function (a) {
+        const cages = (API.farm() || {}).cages || [], location = (a.location || '').match(/cage_\d+/);
+        const id = a.cage_id || (location && location[0]);
+        if (id) return cages.find(function (c) { return c.cage_id === id; }) || null;
+        const matches = cages.filter(function (c) { return c.site_id === a.site_id; });
+        return matches.length === 1 ? matches[0] : null;
+      },
+      alarmField: function (field) {
+        return { tension_pct: '张力利用率（%）', anchor_tension: '锚链张力（kN）', design_tension: '设计允许值（kN）',
+          tilt_roll: '横滚角（°）', tilt_pitch: '俯仰角（°）', tilt_angle: '倾斜角（°）',
+          chain_id: '锚链编号', anchor_id: '锚编号', net_area_tension: '网衣拉力（kN）' }[field] || '触发字段 ' + field;
+      },
+      alarmSnapshot: function (a) {
+        const snap = a.trigger_snapshot || {};
+        const keys = [a.trigger_field, 'chain_id', 'anchor_id', 'anchor_tension', 'design_tension'].concat(Object.keys(snap));
+        return keys.filter(function (k, i) {
+          return keys.indexOf(k) === i && ['ts', 'source', 'quality'].indexOf(k) < 0 && snap[k] != null && typeof snap[k] !== 'object';
+        }).map(function (k) {
+          return { key: k, label: this.alarmField(k), value: snap[k] };
+        }, this);
+      },
+      alarmTime: function (ts) { return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '时间未提供'; },
+      locateAlarm: function (a) {
+        const cage = this.alarmCage(a);
+        if (!cage) return;
+        this.alarmId = a.alarm_event_id;
+        global.CurrentCage.set(cage.cage_id);
+        selectCage.call(this, cage.cage_id);
+        this.pickedLine = a.chain_id || '';
+        this.pickedArea = a.net_zone || a.net_area_id || '';
+        const type = a.rule_id || a.alarm_type || '';
+        const screen = /TILT|tilt|deformation/.test(type) ? 3 : /NET|net/.test(type) ? 2 : 1;
+        this.$refs.detailScreens.pick(screen);
+      },
       lineState: function (line) {
         if (line.demo) return '页面演示';
         if (line.tension === null) return '张力缺失';
@@ -1120,12 +1172,19 @@
         });
       }
     },
-    mounted: function () { bindCurrentCage(this); this.unsub = API.bind(this, this.load); this.load(); },
+    mounted: function () {
+      bindCurrentCage(this); this.unsub = API.bind(this, this.load); this.load();
+      const id = global.AlarmRoutes && global.AlarmRoutes.focusId;
+      if (id) {
+        global.AlarmRoutes.focusId = '';
+        this.$nextTick(function () { if (this.selectedAlarm && this.selectedAlarm.alarm_event_id === id) this.locateAlarm(this.selectedAlarm); });
+      }
+    },
     beforeUnmount: function () { unbindCurrentCage(this); if (this.unsub) { this.unsub(); this.unsub = null; } },
     watch: { minutes: function () { this.load(); } },
     template: [
       "<div class=\"show-page\">",
-      "<page-head title=\"结构安全 · 监测详情\" desc=\"按锚链、网衣、姿态分屏核查；点击测点记录查看对应趋势。\" />",
+      "<page-head title=\"结构安全 · 监测详情\" desc=\"红点对应全部网箱的未解除事件；先查看触发快照，再定位所属网箱和测点。\" />",
       "<div class=\"show-body\">",
       "<div class=\"show-actions\">",
       "<time-range v-model=\"minutes\" />",
@@ -1251,9 +1310,13 @@
       "</div>",
       "</secondary-page>",
       "</div>",
-      "<show-screens :labels=\"['锚链张力', '网衣监测', '姿态与形变']\">",
+      "<show-screens ref=\"detailScreens\" :labels=\"['未解除告警 · '+unresolvedAlarms.length, '锚链张力', '网衣监测', '姿态与形变']\">",
       "<template #default=\"{screen}\">",
-      "<template v-if=\"screen===0\">",
+      "<div v-if=\"screen===0\" class=\"show-row wide\">",
+      "<section class=\"card struct-alarm-list\"><div class=\"card-title\">本页未解除告警 · {{unresolvedAlarms.length}} 条（全部网箱）</div><p class=\"show-note\">与导航红点同源；确认不等于解除。触发时读数与当前读数分别核对。</p>",
+      "<paged-records :items=\"unresolvedAlarms\" :size=\"5\"><template #default=\"{rows}\"><table class=\"dt\"><thead><tr><th>级别 / 事件</th><th>网箱 / 测点</th><th>查看</th></tr></thead><tbody><tr v-for=\"a in rows\" :key=\"a.alarm_event_id\"><td>{{ CN.riskLevel(a.risk_level) }} · {{a.rule_name}}</td><td>{{alarmCage(a)?.cage_name || '归属未确认'}}<br>{{a.chain_id || alarmField(a.trigger_field || '未提供')}}</td><td><button @click=\"alarmId=a.alarm_event_id\" :aria-pressed=\"selectedAlarm?.alarm_event_id===a.alarm_event_id\">{{a.alarm_event_id}}</button></td></tr></tbody></table><div v-if=\"!rows.length\" class=\"empty\">本页没有未解除告警。预置演示记录不计入业务红点。</div></template></paged-records></section>",
+      "<section class=\"card struct-alarm-evidence\"><template v-if=\"selectedAlarm\"><div class=\"card-title\">{{selectedAlarm.rule_name}}</div><div class=\"show-note\">{{selectedAlarm.alarm_event_id}} · {{selectedAlarm.source==='simulated'?'设备模拟器越限事件':selectedAlarm.source==='measured'?'设备上报事件':'来源未标注'}}<br>{{alarmTime(selectedAlarm.trigger_snapshot?.ts || selectedAlarm.alarm_ts)}}</div><div class=\"kv\"><span class=\"k\">所属网箱</span><span>{{alarmCage(selectedAlarm)?.cage_name || '归属未确认，不能定位'}}</span><span class=\"k\">触发条件</span><span>{{alarmField(selectedAlarm.trigger_field || '未提供')}}：{{selectedAlarm.trigger_value ?? '—'}} / 阈值 {{selectedAlarm.trigger_threshold ?? '—'}}</span><span class=\"k\">事件状态</span><span>{{selectedAlarm.alarm_status==='acknowledged'?'已确认，尚未解除':'活跃，尚未解除'}}</span></div><div class=\"show-note\">这是触发快照；当前读数正常不代表事件已经解除。</div><paged-records :items=\"alarmSnapshot(selectedAlarm)\" :size=\"4\"><template #default=\"{rows}\"><div class=\"kv\"><template v-for=\"r in rows\" :key=\"r.key\"><span class=\"k\">{{r.label}}</span><span>{{r.value}}</span></template></div></template></paged-records><div class=\"show-actions\"><button class=\"primary\" :disabled=\"!alarmCage(selectedAlarm)\" @click=\"locateAlarm(selectedAlarm)\">定位异常测点</button><a href=\"#/mgmt/alarm\">完整告警追溯 →</a></div></template><div v-else class=\"empty\">暂无需要定位的未解除事件。</div></section></div>",
+      "<template v-else-if=\"screen===1\">",
       "<div class=\"show-row wide\">",
       "<div class=\"card\">",
       "<div class=\"card-title\">锚链测点布设</div>",
@@ -1277,7 +1340,7 @@
       "<stat-card name=\"观测时间\" :value=\"last.ts ? new Date(last.ts).toLocaleTimeString('zh-CN') : '—'\" unit=\"\"  />",
       "</div>",
       "</template>",
-      "<template v-else-if=\"screen===1\">",
+      "<template v-else-if=\"screen===2\">",
       "<div class=\"show-row wide\">",
       "<div class=\"card\">",
       "<div class=\"card-title\">网衣测点布设</div>",
@@ -1368,10 +1431,14 @@
             condition: fish.alarm === null ? '暂无阈值' : '水温 ≥ ' + fish.alarm + ' ℃',
             level: '红色', source: 'water_temp + 鱼种温度参数库', basis: '按该网箱鱼种取值；环境板块负责实际水温预警' });
         });
+        rows.forEach(function (r) { r.handling_page = global.AlarmRoutes.pageFor({ rule_id: r.id }); });
         return rows;
       }
     },
-    methods: { selectCage: selectCage },
+    methods: {
+      selectCage: selectCage,
+      handlingLabel: function (path) { return global.AlarmRoutes.labelFor(path); }
+    },
     mounted: function () {
       bindCurrentCage(this);
       const self = this;
@@ -1415,8 +1482,8 @@
       "<tr v-for=\"(r,i) in rows\" :key=\"r.id+i\">",
       "<td>{{ r.id }}</td>",
       "<td>{{ r.name }}</td>",
-      "<td>{{ r.condition }}</td>",
-      "<td>{{ r.level }}</td>",
+      "<td style=\"white-space:normal\">{{ r.condition }}</td>",
+      "<td>{{ r.level }}<br>处置入口：<a :href=\"'#'+r.handling_page\">{{ handlingLabel(r.handling_page) }}</a></td>",
       "</tr>",
       "</tbody>",
       "</table>",

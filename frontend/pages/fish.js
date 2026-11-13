@@ -49,21 +49,38 @@
   PAGES['/fish/monitor'] = {
     data: function () {
       return {
-        minutes: 60, series: [],
+        tick: 0, minutes: 60, series: [], growth: [], cageId: '', loadRequest: 0,
         cameras: [], camOffline: false, selectedCam: 0, cameraGrid: false,
         camRaf: null, camPoll: null, tileState: null
       };
     },
     computed: {
       last: function () { return this.series.length ? this.series[this.series.length - 1] : {}; },
-      charts: function () {
-        return [
-          { name: '现存尾数', unit: '尾', data: this.series.map(function (r) { return [r.ts, r.fish_count]; }) },
-          { name: '平均体重', unit: 'g', axis: 1, data: this.series.map(function (r) { return [r.ts, r.avg_weight_g]; }) }
-        ];
-      },
-      biomassCharts: function () {
-        return [{ name: '预估总体重', unit: 'kg', data: this.series.map(function (r) { return [r.ts, r.total_biomass_kg]; }) }];
+      /* 王浩然的120天生长屏，复用稳定跨天仿真历史及台账S型计划。 */
+      longCharts: function () {
+        this.tick;
+        const cid = this.cageId;
+        const cage = ((API.farm() || {}).cages || []).find(function (c) { return c.cage_id === cid; });
+        const st = (cage && cage.stocking) || {};
+        const t0 = Date.parse(st.date), t1 = Date.parse(st.plan_harvest);
+        const w0 = Number(st.init_size_g), w1 = Number(st.target_size_g);
+        if (!(t1 > t0 && w1 > w0 && w0 > 0)) return { weight: [], bio: [] };
+        const now = Date.now();
+        const rows = this.growth.filter(function (r) { return r.cage_id === cid && Number.isFinite(r.ts) && r.ts <= now; }).slice(-120);
+        const plan = rows.map(function (r) {
+          const u = Math.max(0, Math.min(1, (r.ts - t0) / (t1 - t0)));
+          return [r.ts, Math.round((w0 + (w1 - w0) * (3*u*u - 2*u*u*u)) * 10) / 10];
+        });
+        const count = cage.current_count;
+        return {
+          weight: [
+            { name: '计划平均体重 · S型示意', unit: 'g', data: plan },
+            { name: '每日仿真体重', unit: 'g', data: rows.map(function (r) { return [r.ts, r.avg_weight_g]; }) }
+          ],
+          bio: [{ name: '计划总体重', unit: 'kg', data: plan.map(function (r) {
+            return [r[0], count == null ? null : Math.round(Number(count) * r[1] / 100) / 10];
+          }) }]
+        };
       },
       /* 摄食强度变化即"事件"——由数据实时判定，不造假事件 */
       events: function () {
@@ -84,11 +101,16 @@
     },
     methods: {
       load: function () {
-        const self = this;
-        API.resolve(/* 🔴 2026-10-20 队长代王浩然补（任务 王-1）：鱼类按**当前网箱**出数。
-         后端 fish_series 早就支持 cage_id，前端一直没传 —— 所以切网箱时鱼类 KPI 不变。
-         切网箱会调 API._bump()，而本页 API.bind(this, load) 会重跑 load，所以自动刷新。 */
-        API.fish(this.minutes, window.CurrentCage ? window.CurrentCage.get() : null), function (d) { self.series = d; });
+        const self = this, cid = global.CurrentCage ? global.CurrentCage.get() : 'cage_01';
+        const request = ++this.loadRequest;
+        if (cid !== this.cageId) { this.cageId = cid; this.series = []; this.growth = []; }
+        const valid = function () { return request === self.loadRequest && cid === self.cageId; };
+        Promise.resolve(API.fish(this.minutes, cid)).then(function (d) {
+          if (valid()) self.series = Array.isArray(d) ? d : [];
+        }, function () { if (valid()) self.series = []; });
+        Promise.resolve(API.fishGrowth(cid)).then(function (d) {
+          if (valid()) self.growth = Array.isArray(d) ? d : [];
+        }, function () { if (valid()) self.growth = []; });
       },
       cn: function (v) { return { none: '无', weak: '弱', mid: '中', strong: '强' }[v] || v; },
       time: function (ts) { return new Date(ts).toLocaleString('zh-CN', { hour12: false }); },
@@ -198,6 +220,7 @@
     },
     beforeUnmount: function () {
       if (this.unsub) { this.unsub(); this.unsub = null; }
+      this.loadRequest++;
       this.stopTiles();
     },
     watch: { minutes: function () { this.load(); } },
@@ -216,7 +239,7 @@
       "    </div>",
       "  </div><div v-if=\"camOffline\" class=\"show-note\">视觉链路不可用，停止显示旧画面。</div>",
       "</div>",
-      "<div v-show=\"screen===2\" class=\"show-row two\"><trend-chart title=\"数量与生长趋势 · 按单位分轴\" :series=\"charts\" /><trend-chart title=\"预估总体重趋势\" :series=\"biomassCharts\" /></div>",
+      "<div v-show=\"screen===2\" class=\"show-note\">最近120个日度点；历史为仿真，非现场实测。计划形态为示意，参数取自台账；底部时间窗用于当前监测。<a href=\"#/fish/growth\">完整生长对照 →</a></div><div v-show=\"screen===2\" class=\"show-row two\"><trend-chart title=\"平均体重生长曲线 · 最近120天\" :series=\"longCharts.weight\" date-axis /><trend-chart title=\"计划总体重 · 按当前台账尾数估算\" :series=\"longCharts.bio\" date-axis /></div>",
       "<div v-show=\"screen===3\" class=\"card\"><div class=\"card-title\">摄食行为变化 · {{events.length}} 条</div><paged-records :items=\"events\"><template #default=\"{rows}\"><event-list :items=\"rows\" empty-text=\"本时段摄食强度无变化\" /></template></paged-records></div>",
       "</template></show-screens>",
       "<div class=\"show-stats\"><stat-card name=\"现存尾数\" unit=\"尾\" :value=\"last.fish_count\" :digits=\"0\" /><stat-card name=\"预估总体重\" unit=\"kg\" :value=\"last.total_biomass_kg\" /><stat-card name=\"平均体重\" unit=\"g\" :value=\"last.avg_weight_g\" /><stat-card name=\"摄食强度\" :value=\"cn(last.feeding_intensity)\" /></div>",
@@ -285,7 +308,8 @@
         const one = function () {
           if (!self.active || self.view !== '3d') return;
           const request = ++self.request3d;
-          fishGet('/api/fish/positions3d').then(function (d) {
+          const cageId = global.CurrentCage ? global.CurrentCage.get() : 'cage_01';
+          fishGet('/api/fish/positions3d', { cage_id: cageId }).then(function (d) {
             if (!self.active || self.view !== '3d' || request !== self.request3d) return;
             if (d.offline || !d.data || !Array.isArray(d.data.points)) {
               self.offline3d = true; self.pointCount = 0;
@@ -338,7 +362,7 @@
       "<div class=\"show-page\"><page-head title=\"鱼类 · 鱼群空间分布\" desc=\"二维密度与后端三维点云 · 每 3 秒更新三维样本\" /><div class=\"show-body\">",
       "<div class=\"show-row three\"><div class=\"card\"><div class=\"card-title\">视图与图例</div><div class=\"show-actions\"><button :class=\"{primary:view==='2d'}\" @click=\"switchView('2d')\">二维网格</button><button :class=\"{primary:view==='3d'}\" @click=\"switchView('3d')\">三维点云</button></div><div class=\"show-note\">二维红色表示相对高密度，不代表告警。三维点色保留后端仿真场景状态。</div><div class=\"kv\"><span class=\"k\">当前视图</span><span>{{view==='2d'?'平面集中区':'空间聚集关系'}}</span><span class=\"k\">链路状态</span><span>{{(view==='2d'?offline:offline3d)?'不可用':'可用'}}</span></div><button @click=\"load\">重新采样</button></div>",
       "<div class=\"card\"><div class=\"card-title\">{{view==='2d'?'二维相对密度':'当前网箱 · 三维鱼群'}}</div><template v-if=\"view==='2d'\"><div v-if=\"offline\" class=\"empty\">视觉链路不可用，不显示上一个值</div><heat-grid v-else title=\"鱼群密度分布\" :grid=\"grid\" unit=\"尾/m³\" :height=\"410\" /></template><template v-else><scene-slot focus=\"stock\" :point-cloud=\"pointCloud\" /><div v-if=\"offline3d\" class=\"show-note\">视觉链路不可用，三维样本已清空。</div></template></div>",
-      "<div class=\"card\"><div class=\"card-title\">空间读数</div><div class=\"kv\"><span class=\"k\">最高密度位置</span><span>{{peak.best.v==null?'—':'X'+(peak.best.x+1)+' / Y'+(peak.best.y+1)}}</span><span class=\"k\">三维样本</span><span>{{pointCount}} 个点</span><span class=\"k\">最近更新</span><span>{{lastUpdate||'—'}}</span></div><div class=\"show-note\">点位按接口范围映射到当前网箱。构件与锚位为概念示意。拖拽旋转，滚轮缩放。</div><div class=\"show-actions\"><a href=\"#/fish/monitor\">鱼类监测 →</a><a href=\"#/fish/records\">原始记录 →</a></div></div></div>",
+      "<div class=\"card\"><div class=\"card-title\">空间读数</div><div class=\"kv\"><span class=\"k\">最高密度位置</span><span>{{peak.best.v==null?'—':'X'+(peak.best.x+1)+' / Y'+(peak.best.y+1)}}</span><span class=\"k\">三维样本</span><span>{{pointCount}} 个点</span><span class=\"k\">鱼种分布形态</span><span>{{pointCloud ? pointCloud.species + (pointCloud.species==='大黄鱼'?' · 集群·中下层':pointCloud.species==='许氏平鲉'?' · 贴底·分散':'') : '—'}}</span><span class=\"k\">最近更新</span><span>{{lastUpdate||'—'}}</span></div><div class=\"show-note\">点位按接口范围映射到当前网箱。构件与锚位为概念示意。拖拽旋转，滚轮缩放。 鱼群分布为展示仿真，非实测分布。</div><div class=\"show-actions\"><a href=\"#/fish/monitor\">鱼类监测 →</a><a href=\"#/fish/records\">原始记录 →</a></div></div></div>",
       "<div class=\"show-stats\"><stat-card name=\"最高密度\" unit=\"尾/m³\" :value=\"peak.best.v\" /><stat-card name=\"平均密度\" unit=\"尾/m³\" :value=\"peak.avg\" /><stat-card name=\"三维点数\" :value=\"pointCount\" :digits=\"0\" /></div></div></div>"
     ].join('\n')
   };
@@ -361,7 +385,7 @@
         this.tick;
         return this.live.length ? this.live[this.live.length - 1] : null;
       },
-      /* 生长模型结果：全部由台账真实配置 + 当前观测推导，不编数字 */
+      /* 计划形态为示意；运行样本与历史由后端仿真器生成。 */
       m: function () {
         const c = this.cage;
         const DAY = 86400000;
@@ -373,34 +397,32 @@
         t1 = Date.parse(st.plan_harvest);
         w0 = +st.init_size_g;
         wT = +st.target_size_g;
-        if (!(t1 > t0) || !(wT > w0)) return out;
+        if (!(t1 > t0) || !Number.isFinite(w0) || !Number.isFinite(wT) || !(w0 > 0) || !(wT > w0)) return out;
         const now = Date.now();
         const totalDays = (t1 - t0) / DAY;
         const elapsed = Math.max(0, (now - t0) / DAY);
         const planRate = (wT - w0) / totalDays;
-        const planToday = w0 + planRate * elapsed;
+        const u = Math.max(0, Math.min(1, (now - t0) / (t1 - t0)));
+        const planToday = w0 + (wT - w0) * (3 * u * u - 2 * u * u * u);
         const hasObs = this.liveLast && this.liveLast.avg_weight_g != null && Number.isFinite(Number(this.liveLast.avg_weight_g)) && Number(this.liveLast.avg_weight_g) > 0;
-        const obs = hasObs ? this.liveLast.avg_weight_g : null;
+        const obs = hasObs ? Number(this.liveLast.avg_weight_g) : null;
         let etaTs = null, etaDays = null, obsRate = null;
         if (obs != null) {
           obsRate = elapsed > 0 ? (obs - w0) / elapsed : null;
           if (obsRate > 0) {
-            etaDays = (wT - obs) / obsRate;
+            etaDays = Math.max(0, (wT - obs) / obsRate);
             etaTs = now + etaDays * DAY;
           }
         }
-        /* 计划曲线：放养 → 计划起捕，约 80 个采样点 */
+        /* 固定80段，确保包含两个端点，不向计划范围外延伸。 */
         const planPts = [];
-        const step = Math.max(1, Math.round(totalDays / 80));
-        for (let d = 0; d <= totalDays; d += step) {
-          const t = t0 + d * DAY;
-          planPts.push([t, Math.round((w0 + planRate * d) * 10) / 10]);
+        for (let i = 0; i <= 80; i++) {
+          const u = i / 80, t = t0 + (t1 - t0) * u;
+          planPts.push([t, Math.round((w0 + (wT - w0) * (3 * u * u - 2 * u * u * u)) * 10) / 10]);
         }
-        planPts.push([t1, wT]);
-        /* 实测段：近 5 分钟数据，在全周期尺度上相当于今天的位置 */
-        const obsPts = obs != null
-          ? this.live.map(function (r) { return [r.ts, r.avg_weight_g]; })
-          : [];
+        const obsPts = this.live.filter(function (r) {
+          return Number.isFinite(r.ts) && r.avg_weight_g != null && Number.isFinite(Number(r.avg_weight_g)) && Number(r.avg_weight_g) > 0;
+        }).map(function (r) { return [r.ts, Number(r.avg_weight_g)]; });
         return {
           ok: true,
           elapsedDays: Math.round(elapsed),
@@ -420,8 +442,8 @@
       charts: function () {
         const x = this.m;
         if (!x.ok) return [];
-        const list = [{ name: '计划体重', unit: 'g', data: x.planPts }];
-        if (x.obsPts && x.obsPts.length) list.push({ name: '当前监测', unit: 'g', data: x.obsPts });
+        const list = [{ name: '计划体重 · S 型示意', unit: 'g', data: x.planPts }];
+        if (x.obsPts && x.obsPts.length) list.push({ name: '仿真体重历史', unit: 'g', data: x.obsPts });
         return list;
       },
       thresholds: function () {
@@ -441,7 +463,7 @@
         if (global.CurrentCage) this.cageId = global.CurrentCage.get();
         const cageId = this.cageId; this.live = [];
         API.resolve(API.farm(), function (f) { if (request === self.loadRequest) self.farm = f; });
-        API.resolve(API.fish(5, cageId), function (d) { if (request === self.loadRequest && cageId === self.cageId) self.live = (d && d.slice) ? d.slice() : []; });
+        API.resolve(API.fishGrowth(cageId), function (d) { if (request === self.loadRequest && cageId === self.cageId) self.live = Array.isArray(d) ? d.slice() : []; });
       },
       fmtDate: function (ts) { return ts ? new Date(ts).toLocaleDateString('zh-CN') : ''; },
       selectCage: function () {
@@ -479,6 +501,7 @@
             return line;
           });
           inst.setOption({
+            animation: false,
             grid: { left: 56, right: 20, top: 36, bottom: 32 },
             tooltip: { trigger: 'axis' },
             legend: { top: 0, textStyle: { fontSize: 12 } },
@@ -515,12 +538,12 @@
       m: function () { this.renderChart(); }
     },
     template: [
-      "<div class=\"show-page\"><page-head title=\"鱼类 · 生长模型与预测\" desc=\"放养台账与当前观测推导 · 预测会随后续观测更新\" /><div class=\"show-body\">",
+      "<div class=\"show-page\"><page-head title=\"鱼类 · 生长模型与预测\" desc=\"台账计划与跨天仿真体重对照 · 预计日期按平均增重估算\" /><div class=\"show-body\">",
       "<div v-if=\"!cages.length\" class=\"card empty\">暂无养殖配置，生长模型不可用。</div>",
       "<show-screens v-else :labels=\"['生长对照与预测','预测条件与依据']\"><template #default=\"{screen}\">",
-      "<div v-show=\"screen===0\" class=\"show-row wide\"><div class=\"card\"><div class=\"card-title\">生长曲线 · 实际 / 计划</div><div v-if=\"m.ok\" ref=\"growthCanvas\" class=\"chart\" style=\"flex:1;min-height:220px\"></div><div v-else class=\"empty\">放养日期、起捕计划或目标规格不完整，暂无法计算。</div><div class=\"show-note\">虚线为上市规格；监测段使用最近5分钟的当前网箱数据；鱼类运行值由仿真器生成。</div></div><div class=\"card\"><div class=\"card-title\">预测结论</div><template v-if=\"m.ok\"><div class=\"hero-label\">预计起捕日期</div><div class=\"hero-value\">{{m.etaDays!=null?etaText:'暂无法预测'}}</div><div class=\"kv\"><span class=\"k\">当前鱼种</span><span>{{cage.species}}</span><span class=\"k\">预计还需</span><span>{{m.etaDays??'—'}} 天</span><span class=\"k\">目标规格</span><span>{{m.wT}} g</span><span class=\"k\">计划起捕</span><span>{{fmtDate(m.t1)}}</span><span class=\"k\">计划日均增重</span><span>{{m.planRate}} g/天</span></div><div v-if=\"m.obs==null\" class=\"show-note\">当前网箱暂无实时体重观测，仅展示人工计划，无法推算实际进度。</div><div v-else-if=\"m.etaDays==null\" class=\"show-note\">监测体重未增长，暂无法预测。</div><div v-else class=\"show-note\">已养 {{m.elapsedDays}} 天；按当前速率 {{m.obsRate}} g/天估算。</div></template><button @click=\"load\">重新计算</button></div></div>",
-      "<div v-show=\"screen===1\" class=\"show-row two\"><div class=\"card\"><div class=\"card-title\">预测输入与适用条件</div><div v-if=\"cage\" class=\"kv\"><span class=\"k\">当前网箱</span><span>{{cage.cage_name}}</span><span class=\"k\">鱼种</span><span>{{cage.species}}</span><template v-if=\"cage.stocking\"><span class=\"k\">放养日期</span><span>{{cage.stocking.date||'—'}}</span><span class=\"k\">初始规格</span><span>{{cage.stocking.init_size_g??'—'}} g</span><span class=\"k\">计划起捕</span><span>{{cage.stocking.plan_harvest||'—'}}</span><span class=\"k\">目标规格</span><span>{{cage.stocking.target_size_g??'—'}} g</span></template></div><div class=\"show-actions\"><a href=\"#/mgmt/cages\">养殖配置 →</a><button @click=\"load\">核对并重算</button></div></div><div class=\"card\"><div class=\"card-title\">模型与样本依据</div><div class=\"show-note\">计划曲线为 W(t)=W0+r·t，W0 取台账初始规格，r=(目标规格−初始规格)÷计划养殖天数。预测速率=(实测体重−初始规格)÷已养天数。</div><div class=\"kv\"><span class=\"k\">可用观测样本</span><span>{{live.length}} 条</span><span class=\"k\">观测窗口</span><span>最近 5 分钟</span><span class=\"k\">模型适用状态</span><span>{{m.ok?'台账条件完整':'台账条件不足'}}</span></div><div class=\"show-note\">线性估算不包含 FCR、体长离散度或死亡数。体长体重关系 W=lw_a·L^lw_b 按鱼种取参，出处保留于鱼种档案。</div><div class=\"show-actions\"><a href=\"#/fish/species\">鱼种档案 →</a><a href=\"#/fish/records\">原始观测 →</a></div></div></div>",
-      "</template></show-screens><div v-if=\"m.ok\" class=\"show-stats\"><stat-card name=\"实测体重\" unit=\"g\" :value=\"m.obs\" /><stat-card name=\"今日计划体重\" unit=\"g\" :value=\"m.planToday\" /><stat-card name=\"计划偏差\" unit=\"g\" :value=\"m.dev\" /><stat-card name=\"距计划起捕\" unit=\"天\" :value=\"m.daysToPlan\" /></div><div class=\"show-actions\"><select v-model=\"cageId\" @change=\"selectCage\" aria-label=\"预测网箱\"><option v-for=\"c in cages\" :key=\"c.cage_id\" :value=\"c.cage_id\">{{c.cage_name}} · {{c.species}}</option></select><span class=\"show-note\">预测对象与全平台当前网箱同步。</span></div></div></div>"
+      "<div v-show=\"screen===0\" class=\"show-row wide\"><div class=\"card\"><div class=\"card-title\">生长曲线 · 仿真历史 / 计划示意</div><div v-if=\"m.ok\" ref=\"growthCanvas\" class=\"chart\" style=\"flex:1;min-height:220px\"></div><div v-else class=\"empty\">放养日期、起捕计划或目标规格不完整，暂无法计算。</div><div class=\"show-note\">历史按台账生成，非现场实测；末点为当前仿真读数。计划形态为示意，参数取自台账；虚线为目标规格。</div></div><div class=\"card\"><div class=\"card-title\">预测结论</div><template v-if=\"m.ok\"><div class=\"hero-label\">预计起捕日期</div><div class=\"hero-value\">{{m.etaDays!=null?etaText:'暂无法预测'}}</div><div class=\"kv\"><span class=\"k\">当前鱼种</span><span>{{cage.species}}</span><span class=\"k\">预计还需</span><span>{{m.etaDays??'—'}} 天</span><span class=\"k\">目标规格</span><span>{{m.wT}} g</span><span class=\"k\">计划起捕</span><span>{{fmtDate(m.t1)}}</span><span class=\"k\">计划平均增重</span><span>{{m.planRate}} g/天</span></div><div v-if=\"m.obs==null\" class=\"show-note\">当前网箱暂无可用体重，仅保留计划与每日仿真历史，暂无法估算起捕日期。</div><div v-else-if=\"m.etaDays==null\" class=\"show-note\">当前体重未增长或已养天数不足，暂无法预测。</div><div v-else class=\"show-note\">已养 {{m.elapsedDays}} 天；按全周期平均增重 {{m.obsRate}} g/天估算。</div></template><button @click=\"load\">重新计算</button></div></div>",
+      "<div v-show=\"screen===1\" class=\"show-row two\"><div class=\"card\"><div class=\"card-title\">预测输入与适用条件</div><div v-if=\"cage\" class=\"kv\"><span class=\"k\">当前网箱</span><span>{{cage.cage_name}}</span><span class=\"k\">鱼种</span><span>{{cage.species}}</span><template v-if=\"cage.stocking\"><span class=\"k\">放养日期</span><span>{{cage.stocking.date||'—'}}</span><span class=\"k\">初始规格</span><span>{{cage.stocking.init_size_g??'—'}} g</span><span class=\"k\">计划起捕</span><span>{{cage.stocking.plan_harvest||'—'}}</span><span class=\"k\">目标规格</span><span>{{cage.stocking.target_size_g??'—'}} g</span></template></div><div class=\"show-actions\"><a href=\"#/mgmt/cages\">养殖配置 →</a><button @click=\"load\">核对并重算</button></div></div><div class=\"card\"><div class=\"card-title\">模型与样本依据</div><div class=\"show-note\">计划采用 W=W0+(WT−W0)(3u²−2u³)，u 为放养至计划起捕的时间比例（限 0–1）。形态为示意，参数取自台账；未采用缺少参数的 von Bertalanffy 模型。</div><div class=\"kv\"><span class=\"k\">仿真样本数</span><span>{{live.length}} 条</span><span class=\"k\">历史范围</span><span>放养日至今 · 每日仿真</span><span class=\"k\">模型适用状态</span><span>{{m.ok?'台账条件完整':'台账条件不足'}}</span></div><div class=\"show-note\">预计日期单独按平均增重=(当前仿真体重−初始规格)÷已养天数线性外推，不是 S 型模型预测；不包含 FCR、体长离散度或死亡数。体长体重关系 W=lw_a·L^lw_b 按鱼种取参，出处保留于鱼种档案。</div><div class=\"show-actions\"><a href=\"#/fish/species\">鱼种档案 →</a><a href=\"#/fish/records\">原始观测 →</a></div></div></div>",
+      "</template></show-screens><div v-if=\"m.ok\" class=\"show-stats\"><stat-card name=\"当前仿真体重\" unit=\"g\" :value=\"m.obs\" /><stat-card name=\"今日计划体重\" unit=\"g\" :value=\"m.planToday\" /><stat-card name=\"计划偏差\" unit=\"g\" :value=\"m.dev\" /><stat-card name=\"距计划起捕\" unit=\"天\" :value=\"m.daysToPlan\" /></div><div class=\"show-actions\"><select v-model=\"cageId\" @change=\"selectCage\" aria-label=\"预测网箱\"><option v-for=\"c in cages\" :key=\"c.cage_id\" :value=\"c.cage_id\">{{c.cage_name}} · {{c.species}}</option></select><span class=\"show-note\">预测对象与全平台当前网箱同步。</span></div></div></div>"
     ].join('\n')
   };
 
@@ -692,7 +715,20 @@
      数据仍来自后端两个参数库（/api/species、/api/species/temp），内容与管理页完全一致；
      管理板块原页面不动。 */
   PAGES['/fish/species'] = {
-    data: function () { return { tick: 0, unsub: null, kw: '', onlyOk: false, picked: null }; },
+    data: function () { return { tick: 0, unsub: null, kw: '', onlyOk: false, picked: null, photoFailed: {},
+      speciesImg: {
+        "大黄鱼":"01_dahuangyu.png","卵形鲳鲹":"02_luoxingtangcan.png","军曹鱼":"03_juncaoyu.png",
+        "花鲈":"04_hualu.png","斜带石斑鱼":"05_xiedaishiban.png","鞍带石斑鱼":"06_andaishiban.png",
+        "赤点石斑鱼":"07_chidianshiban.png","许氏平鲉":"08_xupingyou.png","大菱鲆":"09_dalingping.png",
+        "牙鲆":"10_yaping.png","半滑舌鳎":"11_banhuasheta.png","高体鰤":"12_gaotishi.png",
+        "真鲷":"13_zhendiao.png","黑鲷":"14_heidiao.png","黄鳍鲷":"15_huangqidiao.png",
+        "美国红鱼":"16_meiguohongyu.png","罗非鱼":"17_luofeiyu.png","大西洋鲑":"18_daxiyanggui.png",
+        "虹鳟":"19_hongzun.png","条石鲷":"20_tiaoshidiao.png","圆斑星鲽":"21_yuanbanxingdie.png",
+        "大泷六线鱼":"22_dadaoliuxian.png","绿鳍马面鲀":"23_lvqimamian.png","黄盖鲽":"24_huanggaidie.png",
+        "鲻":"25_ziyu.png","红鳍东方鲀":"26_hongqidongfangtun.png","黄条鰤":"27_huangtiaoshi.png",
+        "梭鱼":"28_suoyu.png","星突江鲽":"29_xingtujiangdie.png","褐篮子鱼":"30_helanziyu.png"
+      }
+    }; },
     computed: {
       tempAll: function () { this.tick; const t = API.speciesTemp(); return (t && t.species) || []; },
       lwrAll: function () { this.tick; return API.species() || []; },
@@ -768,7 +804,7 @@
     beforeUnmount: function () { if (this.unsub) { this.unsub(); this.unsub = null; } },
     template: [
       "<div class=\"show-page\"><page-head title=\"鱼类 · 鱼种档案\" desc=\"适养范围、生长参数与证据 · 未确认字段保持空缺\" /><div class=\"show-body\">",
-      "<div class=\"show-row archive\"><div class=\"card\"><div class=\"card-title\">鱼种目录</div><input v-model=\"kw\" placeholder=\"搜索中文名或拉丁名\" aria-label=\"搜索鱼种\" /><label class=\"small\"><input type=\"checkbox\" v-model=\"onlyOk\" /> 只看有告警线的</label><paged-records :items=\"list\"><template #default=\"{rows}\"><button v-for=\"r in rows\" :key=\"r.cn\" @click=\"picked=r.cn\" :class=\"{primary:selected&&selected.cn===r.cn}\" style=\"text-align:left;padding:8px;margin:0;width:100%\"><b>{{r.cn}}</b></button><div v-if=\"!rows.length\" class=\"empty\">没有匹配的鱼种</div></template></paged-records></div><div class=\"card\"><template v-if=\"selected\"><div class=\"show-actions\"><div class=\"card-title\">{{selected.cn}} · {{selected.latin}}</div><span class=\"tag\">{{selected.evidence||'未确认'}}</span></div><show-screens :labels=\"['适养范围与可信状态','生长参数与依据']\"><template #default=\"{screen}\"><div v-if=\"screen===0\"><div class=\"kv\"><span class=\"k\">最适水温</span><span>{{selected.opt}} ℃</span><span class=\"k\">耐受范围</span><span>{{selected.tol}} ℃</span><span class=\"k\">偏低 / 偏高提示</span><span>{{selected.warnL??'—'}} / {{selected.warnH??'—'}} ℃</span><span class=\"k\">低温 / 高温告警</span><span>{{selected.alarmL??'—'}} / {{selected.alarmH??'—'}} ℃</span><span class=\"k\">证据强度</span><span>{{selected.evidence||'未确认'}}</span></div><div class=\"show-note\">{{selected.note||'暂无补充资料'}}</div><div class=\"show-note\">温度参数来源：{{selected.source||'未确认'}}</div><help-dot :info=\"info(selected)\" :label=\"selected.cn+' · 温度参数依据'\" /></div><div v-else><div class=\"kv\"><span class=\"k\">体长体重关系</span><span>W = a · Lᵇ</span><span class=\"k\">参数 a / b</span><span>{{selected.a??'—'}} / {{selected.b??'—'}}</span><span class=\"k\">体长类型</span><span>{{lenTypeCn(selected.lenType)}}</span><span class=\"k\">生长参数证据</span><span>{{selected.lwrEvidence||'未确认'}}</span></div><div class=\"show-note\">{{selected.lwrSource||'体长体重出处尚未确认'}}</div><a v-if=\"selected.lwrUrl\" :href=\"selected.lwrUrl\" target=\"_blank\" rel=\"noopener\">查看体长体重原始出处</a><div class=\"show-note\">{{selected.lwrNote||'体长体重换算须遵循原文献单位与适用阶段。'}}</div><div class=\"show-note\">缺资料的鱼种仍保留在目录，明确呈现待补证据的字段。</div><a href=\"#/fish/growth\">查看生长预测 →</a></div></template></show-screens></template><div v-else class=\"empty\">暂无鱼种档案，需要后端参数库。</div></div></div><div class=\"show-stats\"><stat-card name=\"鱼种总数\" unit=\"种\" :value=\"stat.total\" :digits=\"0\" /><stat-card name=\"有温度告警线\" unit=\"种\" :value=\"stat.withAlarm\" :digits=\"0\" /><stat-card name=\"两库齐备\" unit=\"种\" :value=\"stat.both\" :digits=\"0\" /><stat-card name=\"官方 / 标准证据\" unit=\"种\" :value=\"stat.byEvidence['官方/标准']||0\" :digits=\"0\" /></div></div></div>"
+      "<div class=\"show-row archive\"><div class=\"card\"><div class=\"card-title\">鱼种目录</div><input v-model=\"kw\" placeholder=\"搜索中文名或拉丁名\" aria-label=\"搜索鱼种\" /><label class=\"small\"><input type=\"checkbox\" v-model=\"onlyOk\" /> 只看有告警线的</label><paged-records :items=\"list\"><template #default=\"{rows}\"><button v-for=\"r in rows\" :key=\"r.cn\" @click=\"picked=r.cn\" :class=\"{primary:selected&&selected.cn===r.cn}\" style=\"text-align:left;padding:8px;margin:0;width:100%\"><b>{{r.cn}}</b></button><div v-if=\"!rows.length\" class=\"empty\">没有匹配的鱼种</div></template></paged-records></div><div class=\"card\"><template v-if=\"selected\"><div class=\"species-profile-head\"><div><div class=\"card-title\">{{selected.cn}} · {{selected.latin}}</div><span class=\"tag\">{{selected.evidence||'未确认'}}</span></div><figure class=\"species-photo\"><img v-if=\"speciesImg[selected.cn]&&!photoFailed[selected.cn]\" :key=\"selected.cn\" :src=\"'/assets/species/'+speciesImg[selected.cn]\" :alt=\"selected.cn\" @error=\"photoFailed[$event.target.alt]=true\" /><div v-else class=\"species-photo-empty\">暂无照片</div></figure></div><show-screens :labels=\"['适养范围与可信状态','生长参数与依据']\"><template #default=\"{screen}\"><div v-if=\"screen===0\"><div class=\"kv\"><span class=\"k\">最适水温</span><span>{{selected.opt}} ℃</span><span class=\"k\">耐受范围</span><span>{{selected.tol}} ℃</span><span class=\"k\">偏低 / 偏高提示</span><span>{{selected.warnL??'—'}} / {{selected.warnH??'—'}} ℃</span><span class=\"k\">低温 / 高温告警</span><span>{{selected.alarmL??'—'}} / {{selected.alarmH??'—'}} ℃</span><span class=\"k\">证据强度</span><span>{{selected.evidence||'未确认'}}</span></div><div class=\"show-note\">{{selected.note||'暂无补充资料'}}</div><div class=\"show-note\">温度参数来源：{{selected.source||'未确认'}}</div><help-dot :info=\"info(selected)\" :label=\"selected.cn+' · 温度参数依据'\" /></div><div v-else><div class=\"kv\"><span class=\"k\">体长体重关系</span><span>W = a · Lᵇ</span><span class=\"k\">参数 a / b</span><span>{{selected.a??'—'}} / {{selected.b??'—'}}</span><span class=\"k\">体长类型</span><span>{{lenTypeCn(selected.lenType)}}</span><span class=\"k\">生长参数证据</span><span>{{selected.lwrEvidence||'未确认'}}</span></div><div class=\"show-note\">{{selected.lwrSource||'体长体重出处尚未确认'}}</div><a v-if=\"selected.lwrUrl\" :href=\"selected.lwrUrl\" target=\"_blank\" rel=\"noopener\">查看体长体重原始出处</a><div class=\"show-note\">{{selected.lwrNote||'体长体重换算须遵循原文献单位与适用阶段。'}}</div><div class=\"show-note\">缺资料的鱼种仍保留在目录，明确呈现待补证据的字段。</div><a href=\"#/fish/growth\">查看生长预测 →</a></div></template></show-screens></template><div v-else class=\"empty\">暂无鱼种档案，需要后端参数库。</div></div></div><div class=\"show-stats\"><stat-card name=\"鱼种总数\" unit=\"种\" :value=\"stat.total\" :digits=\"0\" /><stat-card name=\"有温度告警线\" unit=\"种\" :value=\"stat.withAlarm\" :digits=\"0\" /><stat-card name=\"两库齐备\" unit=\"种\" :value=\"stat.both\" :digits=\"0\" /><stat-card name=\"官方 / 标准证据\" unit=\"种\" :value=\"stat.byEvidence['官方/标准']||0\" :digits=\"0\" /></div></div></div>"
     ].join('\n')
   };
 

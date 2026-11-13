@@ -20,7 +20,7 @@ sandbox.API = {
     return [
       { site_id: 'site_01', site_name: '仿真演示站点', kind: 'farm' },
       { site_id: 'site_02', site_name: '中国近海观测站点 · 芝罘岛（渤海海峡）', kind: 'obs', station_id: 'ZFD' },
-      { site_id: 'site_03', site_name: '中国近海观测站点 · 小麦岛（黄海）', kind: 'obs', station_id: 'XMD', temp_alarm_high: 30, temp_warn_high: 25.5, temp_alarm_low: 4.3, temp_warn_low: 16.5 },
+      { site_id: 'site_03', site_name: '大陈外海（东海）', kind: 'obs', station_id: 'DCN', temp_alarm_high: 30, temp_warn_high: 25.5, temp_alarm_low: 4.3, temp_warn_low: 16.5 },
       { site_id: 'site_04', site_name: '中国近海观测站点 · 嵊山（东海）', kind: 'obs', station_id: 'SSN' },
       { site_id: 'site_05', site_name: '中国近海观测站点 · 遮浪（南海）', kind: 'obs', station_id: 'ZLG' }
     ];
@@ -349,7 +349,7 @@ section('新问题2：真实站点自定义时间历史 + 数据时间范围');
     return { stations: [
       { station_id: 'ZFD', station: { cn: '芝罘岛' }, count: 10248,
         first_local: '2024-07-01 00:00', last_local: '2025-08-31 23:00' },
-      { station_id: 'XMD', station: { cn: '小麦岛' }, count: 10248,
+      { station_id: 'DCN', station: { cn: '大陈' }, count: 10248,
         first_local: '2024-07-01 00:00', last_local: '2025-08-31 23:00' },
       { station_id: 'SSN', station: { cn: '嵊山' }, count: 10248,
         first_local: '2024-07-01 00:00', last_local: '2025-08-31 23:00' },

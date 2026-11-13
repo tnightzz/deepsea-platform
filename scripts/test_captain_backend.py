@@ -44,9 +44,11 @@ class CaptainDataTests(unittest.TestCase):
 
     def test_temperature_is_species_specific_and_handles_low_temperature(self):
         rule = server.PLATFORM.rule_check({'site_id': 'site_03', 'water_temp': 28})
-        self.assertEqual(rule['risk_level'], 'yellow')
+        self.assertEqual(rule['risk_level'], 'red')
         self.assertEqual(rule['alarm_type'], 'water_temp')
         self.assertEqual(server.PLATFORM.rule_check({'site_id': 'site_04', 'water_temp': 28})['risk_level'], 'red')
+        self.assertEqual(server.PLATFORM.rule_check({'site_id': 'site_03', 'water_temp': 26})['risk_level'], 'red')
+        self.assertEqual(server.PLATFORM.rule_check({'site_id': 'site_04', 'water_temp': 26})['risk_level'], 'yellow')
         low = server.PLATFORM.rule_check({'site_id': 'site_03', 'water_temp': 3})
         self.assertEqual(low['risk_level'], 'red')
         self.assertEqual(low['rule_id'], 'R-TEMP-03')

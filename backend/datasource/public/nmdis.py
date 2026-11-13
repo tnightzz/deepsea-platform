@@ -12,9 +12,9 @@
     以此保住「零依赖、断网也能演示」的铁律（项目铁律 R1）。
     数据落在 data/china_stations/，解析脚本 tools/parse_nmdis.py。
 
-【四个站（四大海区各一）】
+【四个在用参考站（渤海海峡、东海、南海）】
     site_02  ZFD 芝罘岛  渤海海峡  37.6N 121.4E   ← 见下方"渤海"说明
-    site_03  XMD 小麦岛  黄海      36.0N 120.4E
+    site_03  DCN 大陈    东海      28.5N 121.9E（大陈外海场景的参考台站，非网箱现场）
     site_04  SSN 嵊山    东海      30.8N 122.8E
     site_05  ZLG 遮浪    南海      22.7N 115.6E
 
@@ -51,7 +51,7 @@ DATA_DIR = os.path.join(ROOT, "data", "china_stations")
 # 台站 → 平台 site_id
 SITE_TO_STATION = {
     "site_02": "ZFD",
-    "site_03": "XMD",
+    "site_03": "DCN",
     "site_04": "SSN",
     "site_05": "ZLG",
 }
@@ -256,6 +256,7 @@ def as_env(site, minutes=60, max_points=720):
         "source_detail": "国家海洋科学数据中心（NMDC）中国台站观测数据 · %s（%s）实测"
                          % (meta.get("station_cn", station), meta.get("sea", "")),
         "source_url": meta.get("source_url"),
+        "reference_note": meta.get("sea_note", ""),
         "cadence_sec": CADENCE_SEC,
         "current": cur,
         "fast": fast,

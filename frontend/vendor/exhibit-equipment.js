@@ -1,49 +1,58 @@
-// Shared cage coordinates; visual placement, not surveyed installation dimensions.
+// Dimensions are metres. References are comparison models, not confirmed installed equipment.
+window.MarineEquipmentSpec={
+ water:{size:[.0762,.4287,.0762],evidence:'厂家参考尺寸，实配型号待确认',reference:'YSI EXO2s'},
+ camera:{size:[.05,.05,.11],evidence:'厂家参考尺寸，实配型号待确认',reference:'YingDiGe HS-XSX-02-A-W-SS'},
+ feed:{size:[.508,1.016,.5588],evidence:'塘用投饵机本体量级参考，海上实配待确认',reference:'Pentair AX70DL'},
+ light:{size:[.12,.377,.12],evidence:'厂家2020款参考尺寸，实配待确认',reference:'AKVA Aurora SubLED 100W'},
+ crane:{size:[.8,.7,.6],evidence:'量级示意，待厂家总图确认'},
+ tension:{size:[.18,.15,.15],evidence:'量级示意，测力卸扣包络待确认'},
+ pose:{size:[.08,.05,.06],evidence:'量级示意，型号待确认'},
+ energy:{size:[1.5,.05,.7],evidence:'演示设计体量，实配待确认'},
+ battery:{size:[.5,.8,.4],evidence:'演示设计体量，实配待确认'}
+};
 window.addMarineEquipment=function(g){
- const {positions:p,box,tube,face,kind}=g;
- [p.light,[1.25,p.light[1],p.light[2]]].forEach((a,i)=>{
-  kind(i?'light-secondary':'light');
-  const [x,y,z]=a;
-  box(x,.38,z,.20,.08,.24);tube([x,.42,z],[x,y,z]);
-  tube([x,y,z],[x,y,z+.48]);box(x,y-.08,z+.43,.44,.12,.28);
-  face([[x-.17,y-.15,z+.32],[x+.17,y-.15,z+.32],[x+.17,y-.15,z+.54],[x-.17,y-.15,z+.54]],'#b4dadd');
+ const {positions:p,box,tube,face,kind,scale:u,deck,edge}=g;
+ // Auxiliary equipment pads extend outboard; the pedestrian path stays clear.
+ ['feed','crane','crane_secondary','energy','battery'].forEach(name=>{
+  const point=p[name],sign=Math.sign(point[2]),size=window.MarineEquipmentSpec[name==='crane_secondary'?'crane':name].size;
+  kind(null);
+  box(point[0],deck-.04*u,point[2],(size[0]+.12)*u,.08*u,(size[2]+.12)*u);
+  [-.2,.2].forEach(dx=>tube([point[0]+dx*u,deck-.08*u,sign*(edge+.65*u)],[point[0]+dx*u,deck-.08*u,point[2]],'brace'));
  });
- [p.crane,[-p.crane[0],p.crane[1],p.crane[2]]].forEach((a,i)=>{
-  kind(i?'crane-secondary':'crane');
-  const [x,y,z]=a;
-  box(x,.39,z,.60,.09,.34);
-  [-.21,.21].forEach(dx=>box(x+dx,.59,z,.08,.34,.30));
-  // Drum axis along X, cable runs inboard to the net edge.
-  for(let i=0;i<16;i++){
-   const a=i*Math.PI/8,b=(i+1)*Math.PI/8;
-   face([[x-.18,y+Math.sin(a)*.15,z+Math.cos(a)*.15],[x+.18,y+Math.sin(a)*.15,z+Math.cos(a)*.15],[x+.18,y+Math.sin(b)*.15,z+Math.cos(b)*.15],[x-.18,y+Math.sin(b)*.15,z+Math.cos(b)*.15]],i%2?'#90adb9':'#607e8c');
+ function device(name,point,draw){
+  kind(name);
+  const pt=(x,y,z)=>[point[0]+x*u,point[1]+y*u,point[2]+z*u];
+  const b=(x,y,z,w,h,d,material)=>box(...pt(x,y,z),w*u,h*u,d*u,material);
+  const t=(a,c,style)=>tube(pt(...a),pt(...c),style);
+  const f=(points,color)=>face(points.map(a=>pt(...a)),color);
+  function cylinder(diameter,length,axis,color){
+   const axes={x:[0,1,2],y:[1,0,2],z:[2,0,1]}[axis],r=diameter/2;
+   const ring=(end)=>Array.from({length:12},(_,i)=>{const a=[];a[axes[0]]=end;a[axes[1]]=Math.cos(i*Math.PI/6)*r;a[axes[2]]=Math.sin(i*Math.PI/6)*r;return a});
+   const a=ring(-length/2),c=ring(length/2);
+   a.forEach((v,i)=>f([v,a[(i+1)%12],c[(i+1)%12],c[i]],i%2?color:'#78949f'));f(a,'#657f8b');f(c,color);
   }
-  [-.22,.22].forEach(dx=>face(Array.from({length:16},(_,i)=>[x+dx,y+Math.sin(i*Math.PI/8)*.18,z+Math.cos(i*Math.PI/8)*.18]),'#9bb8c3'));
-  box(x+.34,.57,z,.17,.20,.23,true);
-  tube([x,y+.15,z],[x,.63,z+.18],'chain');
-  tube([x,.63,z+.18],[x,-.30,z+.18],'chain');
+  draw({b,t,f,cylinder,pt});
+ }
+ device('feed',p.feed,({b})=>{b(0,0,0,.508,.96,.5588);b(0,.493,0,.508,.03,.5588);b(0,-.493,0,.508,.03,.5588);b(0,.15,.2744,.12,.1,.01,true)});
+ kind('feed');tube([p.feed[0],deck,p.feed[2]],p.feed_outlet,'pipe');
+ ['water','oxygen'].forEach((name,i)=>{
+  const point=i?p.oxygen:p.water;
+  device('water',point,({cylinder})=>cylinder(.0762,.4287,'y','#a9c0c8'));
+  kind('water');tube([point[0],deck,p.water_mount[2]],point,'cable');
  });
- kind('camera');
- const c=p.camera;
- box(c[0],.40,c[2]-.18,.18,.08,.24);tube([c[0],.38,c[2]-.18],[c[0],c[1],c[2]-.18]);
- box(c[0],c[1],c[2],.22,.17,.30);box(c[0],c[1],c[2]+.16,.15,.12,.02,'opening');
- box(c[0]-.08,c[1]+.04,c[2]+.16,.025,.025,.02,true);
- kind('energy');
- const e=p.energy;
- [-.30,.30].forEach(dx=>tube([e[0]+dx,.35,e[2]],[e[0]+dx,.80,e[2]]));
- box(e[0],.83,e[2],1.08,.06,.35);
- for(let i=0;i<6;i++)for(let j=0;j<2;j++)box(e[0]-.44+i*.176,.867,e[2]-.08+j*.16,.153,.012,.132,'opening');
- const b=p.battery;
- box(b[0],.66,b[2],.36,.60,.29);box(b[0],.97,b[2],.41,.04,.34);
- box(b[0],.75,b[2]+.153,.12,.08,.015,true);
- [0,1,2].forEach(i=>box(b[0],.49+i*.06,b[2]+.15,.20,.012,.012,'opening'));
- kind('tension');const t=p.tension;
- tube([t[0],t[1]+.09,t[2]],[t[0],t[1]-.09,t[2]],'chain');
- box(t[0],t[1],t[2],.15,.17,.10,true);
- kind('pose');const s=p.pose;
- tube([s[0],.34,s[2]],[s[0],s[1]-.06,s[2]]);
- box(s[0],s[1],s[2],.21,.12,.20);box(s[0],s[1]+.07,s[2],.12,.025,.11,true);
- kind('net');const n=p.net;
- box(n[0],n[1],n[2],.13,.20,.08,true);
- tube([n[0],n[1]+.1,n[2]],[n[0],-.24,n[2]],'netTie');
+ [p.light,p.light_secondary].forEach((point,i)=>{
+  device(i?'light-secondary':'light',point,({cylinder})=>cylinder(.12,.377,'y','#c2e9df'));
+  kind(i?'light-secondary':'light');tube([point[0],deck,p.light_mount[2]],point,'cable');
+ });
+ device('camera',p.camera,({cylinder,b})=>{cylinder(.05,.11,'z','#b8d5de');b(0,0,.054,.035,.035,.002,'opening')});
+ kind('camera');tube([p.camera[0],deck,p.camera_mount[2]],p.camera,'cable');
+ [p.crane,p.crane_secondary].forEach((point,i)=>device(i?'crane-secondary':'crane',point,({b,cylinder})=>{
+  b(0,-.30,0,.8,.10,.6);[-.30,.30].forEach(x=>b(x,0,0,.10,.70,.55));cylinder(.44,.60,'x','#9bb4be');
+ }));
+ device('tension',p.tension,({b,t})=>{b(0,0,0,.18,.15,.15,true);t([0,.15,0],[0,-.15,0],'chain')});
+ device('pose',p.pose,({b})=>b(0,0,0,.08,.05,.06,true));
+ device('net',p.net,({b})=>b(0,0,0,.18,.15,.15,true));
+ kind('energy');[-.5,.5].forEach(dx=>tube([p.energy[0]+dx*u,deck,p.energy[2]],[p.energy[0]+dx*u,p.energy[1]-.025*u,p.energy[2]],'brace'));
+ device('energy',p.energy,({b})=>{b(0,0,0,1.5,.05,.7);for(let i=0;i<6;i++)b(-.625+i*.25,.029,0,.22,.008,.64,'opening')});
+ device('energy',p.battery,({b})=>{b(0,0,0,.5,.8,.4);b(0,.2,.204,.15,.10,.008,true)});
 };

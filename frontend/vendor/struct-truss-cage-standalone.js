@@ -26,23 +26,34 @@
     return Number.isFinite(n) ? n : null;
   }
   function geometry(spec, cageId) {
-    const length = validNumber(spec && spec.length_m);
-    const breadth = validNumber(spec && spec.width_m);
-    const depth = validNumber(spec && spec.depth_m);
-    const confirmed = spec && spec.shape === '桁架式' && length > 0 && breadth > 0 && depth > 0;
-    const second = cageId === 'cage_02';
-    return { length: 5, breadth: confirmed ? 5 * breadth / length : second ? 2.55 : 2,
-      depth: confirmed ? 5 * depth / length : second ? 1.48 : 1.65 };
+    const hex = spec && spec.plan_shape === 'hexagon';
+    const flats = validNumber(spec && spec.across_flats_m);
+    const length = hex && flats > 0 ? 2 * flats / Math.sqrt(3) : validNumber(spec && spec.length_m) || 18;
+    const breadth = hex && flats > 0 ? flats : validNumber(spec && spec.width_m) || 18;
+    const depth = validNumber(spec && spec.depth_m) || 6;
+    const scale = 5 / length, walkway = 1.1 * scale, railHeight = 1.2 * scale;
+    const inner = hex ? Array.from({length: 6}, function (_, i) {
+      const angle = i * Math.PI / 3;
+      return [Math.cos(angle) * 2.5, Math.sin(angle) * 2.5];
+    }) : [[-2.5,-breadth*scale/2],[2.5,-breadth*scale/2],[2.5,breadth*scale/2],[-2.5,breadth*scale/2]];
+    const outer = inner.map(function (p) {
+      return hex ? p.map(function (v) { return v * (1 + 2.2 / breadth); }) :
+        [p[0] + Math.sign(p[0]) * walkway, p[1] + Math.sign(p[1]) * walkway];
+    });
+    return {length: 5, breadth: breadth*scale, depth: depth*scale, scale: scale,
+      planShape: hex ? 'hexagon' : 'square', inner: inner, outer: outer,
+      walkway: walkway, clearWalkway: scale, railHeight: railHeight};
   }
-  // 接口 X/Y 为水平坐标、Z 为向下水深；映射到同一内侧网衣，不改变状态颜色。
+  // 接口 X/Y 为水体外接矩形内的米制坐标，Z 向下；通道不挤占标称水体。
   function mapPoint(point, dims, size) {
-    if (!point || !dims || !['x', 'y', 'z'].every(function (key) {
+    if (!point || !dims || !['x','y','z'].every(function (key) {
       return validNumber(point[key]) !== null && validNumber(dims[key]) > 0;
     })) return null;
     function fraction(key) { return Math.max(0, Math.min(1, point[key] / dims[key])); }
-    return [(fraction('x') * 2 - 1) * (size.length / 2 - 0.35),
-      -0.24 - fraction('z') * (size.depth - 0.24),
-      (fraction('y') * 2 - 1) * (size.breadth / 2 - 0.32)];
+    const x = (fraction('x') - .5) * size.length;
+    const z = (fraction('y') - .5) * size.breadth;
+    if (size.planShape === 'hexagon' && Math.abs(x) + Math.abs(z) / Math.sqrt(3) > size.length/2 + 1e-9) return null;
+    return [x, -fraction('z') * size.depth || 0, z];
   }
   if (global.document && !global.document.getElementById('struct-truss-standalone-style')) {
     const style = global.document.createElement('style');
@@ -58,6 +69,7 @@
       setMooringView: function () {}, dispose: function () {} };
     const view = { yaw: 0.65, pitch: 0.46, zoom: 1, mooring: false,
                    length: 5, breadth: 2, depth: 1.65, variant: 'cage_01' };
+    Object.assign(view, geometry(null, 'cage_01'));
     const reducedMotion = global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let width = 0, height = 0, raf = 0, previous = 0, dragging = false, lastX = 0, lastY = 0;
     let stillUntil = 0, specKey = '', cy = 1, sy = 0, cp = 1, sp = 0;
@@ -76,7 +88,7 @@
       const length = validNumber(spec && spec.length_m);
       const breadth = validNumber(spec && spec.width_m);
       const depth = validNumber(spec && spec.depth_m);
-      const key = [cageId, spec && spec.shape, length, breadth, depth].join(':');
+      const key = [cageId, spec && spec.shape, spec && spec.plan_shape, spec && spec.across_flats_m, length, breadth, depth].join(':');
       if (key === specKey) return;
       specKey = key;
       view.variant = cageId === 'cage_02' ? 'cage_02' : 'cage_01';
@@ -161,11 +173,8 @@
       cy = Math.cos(view.yaw); sy = Math.sin(view.yaw);
       cp = Math.cos(view.pitch); sp = Math.sin(view.pitch);
       drawEnvironment();
-      const halfL = view.length / 2, halfB = view.breadth / 2;
-      const innerL = halfL - 0.35, innerB = halfB - 0.32;
+      const outer = view.outer, inner = view.inner;
       const top = 0.34, lower = -0.24, bottom = -view.depth;
-      const outer = [[-halfL, -halfB], [halfL, -halfB], [halfL, halfB], [-halfL, halfB]];
-      const inner = [[-innerL, -innerB], [innerL, -innerB], [innerL, innerB], [-innerL, innerB]];
       const parts = [];
       function member(a, b, kind) {
         parts.push({ z: (project(a).z + project(b).z) / 2,
@@ -189,17 +198,21 @@
         }
       }
       // 网衣挂在内侧框架上，四个侧面各成一片，底面封闭。
-      for (let side = 0; side < 4; side++) {
-        const a = inner[side], b = inner[(side + 1) % 4];
-        mesh([[a[0], lower, a[1]], [b[0], lower, b[1]],
+      for (let side = 0; side < inner.length; side++) {
+        const a = inner[side], b = inner[(side + 1) % inner.length];
+        mesh([[a[0], top, a[1]], [b[0], top, b[1]],
               [b[0], bottom, b[1]], [a[0], bottom, a[1]]], side % 2 ? 7 : 11, 9);
       }
-      mesh(inner.map(function (p) { return [p[0], bottom, p[1]]; }), 11, 7);
+      if (inner.length === 4) mesh(inner.map(function (p) { return [p[0], bottom, p[1]]; }), 11, 7);
+      else inner.forEach(function (p, i) {
+        const q = inner[(i+1)%inner.length];
+        mesh([[0,bottom,0],[p[0],bottom,p[1]],[q[0],bottom,q[1]],[0,bottom,0]],7,7);
+      });
 
       // 上下弦、立杆、斜撑构成连续的空间钢桁架，不再使用圆形浮圈算法。
-      for (let side = 0; side < 4; side++) {
-        const a = outer[side], b = outer[(side + 1) % 4];
-        const ia = inner[side], ib = inner[(side + 1) % 4];
+      for (let side = 0; side < inner.length; side++) {
+        const a = outer[side], b = outer[(side + 1) % inner.length];
+        const ia = inner[side], ib = inner[(side + 1) % inner.length];
         const bays = side % 2 ? (view.variant === 'cage_02' ? 4 : 3) :
           (view.variant === 'cage_02' ? 6 : 5);
         panel([[a[0], top, a[1]], [b[0], top, b[1]],
@@ -208,6 +221,10 @@
           const p = [mix(a, b, bay / bays), mix(a, b, (bay + 1) / bays)];
           const x = p[0], y = p[1];
           const netAtBay = mix(ia, ib, bay / bays);
+          const innerNext = mix(ia, ib, (bay+1)/bays);
+          member([netAtBay[0],top,netAtBay[1]],[netAtBay[0],top+view.railHeight,netAtBay[1]],'rail');
+          member([netAtBay[0],top+view.railHeight,netAtBay[1]],[innerNext[0],top+view.railHeight,innerNext[1]],'rail');
+          member([x[0],top+view.railHeight/2,x[1]],[y[0],top+view.railHeight/2,y[1]],'rail');
           member([x[0], top, x[1]], [y[0], top, y[1]], 'main');
           member([x[0], lower, x[1]], [y[0], lower, y[1]], 'main');
           member([x[0], bottom, x[1]], [y[0], bottom, y[1]], 'brace');
@@ -215,22 +232,31 @@
           member([x[0], top, x[1]], [y[0], lower, y[1]], 'brace');
           if (bay % 2 === 0) member([x[0], lower, x[1]], [y[0], bottom, y[1]], 'brace');
           // 工作通道外缘的护栏，以及网衣边纲与内框之间的连接线。
-          member([x[0], top, x[1]], [x[0], top + 0.34, x[1]], 'rail');
-          member([x[0], top + 0.34, x[1]], [y[0], top + 0.34, y[1]], 'rail');
+          member([x[0], top, x[1]], [x[0], top + view.railHeight, x[1]], 'rail');
+          member([x[0], top + view.railHeight, x[1]], [y[0], top + view.railHeight, y[1]], 'rail');
           member([x[0], lower, x[1]],
                  [netAtBay[0], lower - 0.05, netAtBay[1]], 'netTie');
         }
         member([b[0], top, b[1]], [b[0], bottom, b[1]], 'main');
-        member([b[0], top, b[1]], [b[0], top + 0.34, b[1]], 'rail');
+        member([b[0], top, b[1]], [b[0], top + view.railHeight, b[1]], 'rail');
         member([ia[0], top, ia[1]], [ib[0], top, ib[1]], 'main');
         member([a[0], top, a[1]], [ia[0], top, ia[1]], 'brace');
-      }
-      // 两侧浮力构件和立柱只表达构造，不代表真实浮力参数。
-      [-halfB, halfB].forEach(function (z) {
-        member([-halfL, 0.08, z], [halfL, 0.08, z], 'float');
-        [-halfL, -halfL / 3, halfL / 3, halfL].forEach(function (x) {
-          member([x, top, z], [x, -0.64, z], 'floatColumn');
+        // Rail posts <= 1 m, two middle rails and a 0.10 m toe board.
+        const posts=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/view.scale);
+        [[a,b],[ia,ib]].forEach(function(edge){
+          for(let j=0;j<=posts;j++){
+            const p=mix(edge[0],edge[1],j/posts);
+            member([p[0],top,p[1]],[p[0],top+view.railHeight,p[1]],'rail');
+          }
+          [.4,.8,1.2].forEach(function(h){member([edge[0][0],top+h*view.scale,edge[0][1]],[edge[1][0],top+h*view.scale,edge[1][1]],'rail')});
+          panel([[edge[0][0],top+.01*view.scale,edge[0][1]],[edge[1][0],top+.01*view.scale,edge[1][1]],[edge[1][0],top+.11*view.scale,edge[1][1]],[edge[0][0],top+.11*view.scale,edge[0][1]]],'#718994');
         });
+      }
+      // 浮力构件沿各边布置，仅表达结构概念，不代表浮力计算。
+      outer.forEach(function (a, i) {
+        const b = outer[(i+1)%outer.length];
+        member([a[0],.08,a[1]],[b[0],.08,b[1]],'float');
+        [0,.5].forEach(function (t) { const p=mix(a,b,t); member([p[0],top,p[1]],[p[0],-.64,p[1]],'floatColumn'); });
       });
       // 四角导缆点 → 悬垂段 → 海床着地点 → 铺底段 → 锚；曲线只是几何示意。
       outer.forEach(function (corner, index) {
@@ -341,6 +367,11 @@
     };
   }
   global.StructTrussCage = {
+    describeSpec: function (spec) {
+      if (!spec) return '尺寸待确认';
+      return spec.plan_shape === 'hexagon' ? '正六角桁架 · 对边距 ' + spec.across_flats_m + ' m · 边长 ' + Number(spec.side_m).toFixed(2) + ' m · 深 ' + spec.depth_m + ' m' :
+        '方形桁架 · ' + spec.length_m + ' × ' + spec.width_m + ' × ' + spec.depth_m + ' m';
+    },
     geometry: geometry,
     mapPoint: mapPoint,
     mount: function (canvas) {

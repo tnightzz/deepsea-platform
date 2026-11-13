@@ -29,7 +29,7 @@ class TemperatureCountsTest(unittest.TestCase):
         server.load_temp_db()
         server.sync_sites_from_farm()
         buckets = {"01": "high_red", "02": "high_yellow", "03": "low_red", "04": "low_yellow"}
-        for sid, station in (("site_04", "SSN"), ("site_03", "XMD")):
+        for sid, station in (("site_04", "SSN"), ("site_03", "DCN")):
             site = next(s for s in server.SITES if s["site_id"] == sid)
             thresholds = server.temp_of(site["species"])
             rows = list(nmdis.load_station(station)["records"])

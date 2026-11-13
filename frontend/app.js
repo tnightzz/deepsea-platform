@@ -47,12 +47,9 @@
          完整记录见 backend/api/env.py 的 2026-10-08 追加说明第 2 条。 */
     ]},
     { group: '结构安全预警', owner: '邓宇涵', items: [
-      /* 🔴 2026-10-18 队长按「重要 × 常用」重排：**灾害分级预警提到第 1**。
-         原来「结构安全总览」在第 1 —— 但值班的人打开这个板块，
-         第一眼要看的是"现在有没有告警、几级"，不是先看总览再点进来。
-         顶部 tab 的入口（TABS 的 first）也一起改成了 /struct/alarm，两处保持一致。 */
+      /* 2026-10-26 会上定：总览恢复第 1，灾害预警第 2；顶部入口同步回总览。 */
+      { path: '/struct/overview', label: '结构安全总览', ready: true },
       { path: '/struct/alarm',  label: '灾害分级预警', ready: true },
-      { path: '/struct/overview', label: '结构安全总览', ready: false },
       { path: '/struct/detail', label: '监测详情', ready: false },
       { path: '/struct/rules',  label: '规则配置', ready: false },
       /* 🔴 2026-10-15 队长删：原「造故障工具 /struct/fault」菜单项**已移除**
@@ -152,7 +149,7 @@
        · 不动各页面的取数逻辑，只让它们多读一个参数。
 
      ⚠️ 与"环境数据"的关系（刘伟豪问的那个）：
-       环境数据**永远来自真实台站**（嵊山 / 小麦岛，NMDC 历史实测），
+       环境数据**永远来自真实台站**（嵊山 / 大陈参考站，NMDC 历史实测），
        "当前网箱"只决定**用哪片海的数据**，**绝不往台站里塞模拟值**。
        网箱 → 海域的对应关系写在 farm.json 里（cage.site_id）。 */
   const CurrentCage = (function () {
@@ -247,33 +244,58 @@
     window.localStorage.setItem('deepsea_cage', CurrentCage.get());
   } catch (e) { /* 隐私模式下继续使用内存状态 */ }
 
-  /* ---------- 板块入口的告警小红点（老师意见 2026-10-09 第 2 条）----------
-   老师原话：「挂鱼类/环境/结构安全/智能四入口；有未解除告警就亮（**不分等级**）；
-               **告警解除才消**（点进去不消）；**纯红点**；管理与跨板块不挂」
-
-   /api/alarms 里**没有** board 字段（这点我核过），所以由 alarm_type 映射到板块。
-   低电量 / 供电异常现在归「管理」，按老师要求**管理与跨板块不挂红点**，
-   所以这两个类型**不点亮任何点** —— 这是刻意的，不是漏了。 */
-const ALARM_BOARD = {
-  /* 鱼类 */  feeding: 'fish', feeding_abnormal: 'fish', fish_anomaly: 'fish', density: 'fish',
-  /* 环境 */  water_temp: 'env', dissolved_oxygen: 'env', salinity: 'env', ph: 'env', light: 'env',
-  /* 结构 */  tension: 'struct', tilt: 'struct', net_damage: 'struct', deformation: 'struct',
-  /* 智能 */  command: 'ai', command_timeout: 'ai', feeder: 'ai', light_device: 'ai', device_offline: 'ai'
-};
-/* 能挂红点的四个板块 —— 总览/管理不挂 */
-const DOT_BOARDS = ['fish', 'env', 'struct', 'ai'];
+  /* 2026-10-26 会上定：规则只归一个处置入口，板块由页面计数求和。
+     2026-10-28 队长确认生产管理也显示红点；总览不挂。 */
+  const ALARM_RULES = [
+    { rule_id: 'R-TENSION-01', handling_page: '/struct/detail' },
+    { rule_id: 'R-TENSION-02', handling_page: '/struct/detail' },
+    { rule_id: 'R-TILT-01', handling_page: '/struct/detail' },
+    { rule_id: 'R-TILT-02', handling_page: '/struct/detail' },
+    { rule_id: 'R-STORM-TENSION-01', handling_page: '/struct/alarm' },
+    { rule_id: 'R-NET-TRIAL-01', handling_page: '/struct/detail' },
+    { rule_id: 'R-NET-TRIAL-02', handling_page: '/struct/detail' },
+    { rule_id: 'R-NET-STATUS', handling_page: '/struct/detail' },
+    { rule_id: 'R-TEMP-01', handling_page: '/env/water' },
+    { rule_id: 'R-TEMP-02', handling_page: '/env/water' },
+    { rule_id: 'R-TEMP-03', handling_page: '/env/water' },
+    { rule_id: 'R-TEMP-04', handling_page: '/env/water' },
+    { rule_id: 'R-BAT-01', handling_page: '/mgmt/energy' },
+    { rule_id: 'R-CMD-01', handling_page: '/ai/commands' }
+  ];
+  const ALARM_PAGES = {
+    feeding: '/fish/monitor', feeding_abnormal: '/fish/monitor', fish_anomaly: '/fish/monitor', density: '/fish/heatmap',
+    water_temp: '/env/water', dissolved_oxygen: '/env/water', salinity: '/env/water', ph: '/env/water', light: '/env/water',
+    tension: '/struct/detail', tilt: '/struct/detail', net_damage: '/struct/detail', deformation: '/struct/detail',
+    command: '/ai/commands', command_timeout: '/ai/commands', feeder: '/ai/feed', light_device: '/ai/light', device_offline: '/ai/devices',
+    low_battery: '/mgmt/energy', power_supply: '/mgmt/energy'
+  };
+  function alarmPage(a) {
+    const rule = ALARM_RULES.find(function (r) { return r.rule_id === a.rule_id; });
+    const page = ALARM_PAGES[a.alarm_type];
+    return (rule && rule.handling_page) || (typeof page === 'string' ? page : '/mgmt/alarm');
+  }
+  window.AlarmRoutes = {
+    rules: ALARM_RULES, pageFor: alarmPage, focusId: '',
+    labelFor: function (path) {
+      for (const group of MENU) {
+        const item = group.items.find(function (it) { return it.path === path; });
+        if (item) return item.label;
+      }
+      return '告警中心';
+    }
+  };
 
 const TABS = [
     { key: 'overview', label: '总览', first: '/overview' },
     { key: 'fish',     label: '鱼类监测', first: '/fish/monitor' , board: 'fish' },
     { key: 'env',      label: '环境检测', first: '/env/sea' , board: 'env' },
-    { key: 'struct',   label: '结构安全', first: '/struct/alarm' , board: 'struct' },
+    { key: 'struct',   label: '结构安全', first: '/struct/overview' , board: 'struct' },
     { key: 'ai',       label: '智能管控', first: '/ai/feed' , board: 'ai' },
     /* 🔴 2026-10-15 队长删：拆掉「跨板块」（老师第 3 条）。告警/处置已挪进「管理」，
        追溯查询删除，参数配置拆解。侧边菜单里的 MENU 也同步删了那一组。 */
     /* 管理板块 —— 养殖生产视角（场长用）。
        放在最后：它是配置类不是监控类。 */
-    { key: 'mgmt',     label: '生产管理', first: '/mgmt/cages' }
+    { key: 'mgmt',     label: '生产管理', first: '/mgmt/cages', board: 'mgmt' }
   ];
 
 
@@ -294,17 +316,23 @@ const TABS = [
                curCageId: CurrentCage.get(), catalogOpen: false };
     },
     computed: {
-      /* 每个板块「未解除」的告警条数 —— 顶部红点亮不亮看它。
-         「未解除」= alarm_status !== 'recovered'（active 与 acknowledged 都算）。
-         ⚠️ 点进去**不消** —— 它读的是告警的实际状态，不是「已读/未读」。 */
-      boardDots: function () {
+      /* 全网箱未解除事件，每条只计入一个页面；确认或阅读不会清零。 */
+      pageDots: function () {
         this.tick;   /* ← 建立响应式依赖，否则永久缓存（见 data 里的说明） */
         const out = {};
-        DOT_BOARDS.forEach(function (b) { out[b] = 0; });
+        MENU.forEach(function (g) { g.items.forEach(function (it) { out[it.path] = 0; }); });
         (API.alarms() || []).forEach(function (a) {
-          if (a.alarm_status === 'recovered') return;      // 已解除 → 不点亮
-          const b = ALARM_BOARD[a.alarm_type];
-          if (b && out[b] !== undefined) out[b] += 1;
+          if (a.alarm_status === 'recovered' || a.event_origin === 'preset_demo') return;
+          out[alarmPage(a)] += 1;
+        });
+        return out;
+      },
+      boardDots: function () {
+        const out = {}, pages = this.pageDots;
+        TABS.forEach(function (t) { if (t.board) out[t.board] = 0; });
+        Object.keys(pages).forEach(function (p) {
+          const board = p.split('/')[1];
+          if (out[board] !== undefined) out[board] += pages[p];
         });
         return out;
       },
@@ -392,7 +420,9 @@ const TABS = [
       /* 角标文字：1~99 显示数字，100 及以上显示 99+ —— 微信/iOS 同款约定，
          三位数会把标签挤变形。 */
       dotText: function (b) {
-        const n = this.boardDots[b] || 0;
+        return this.countText(this.boardDots[b] || 0);
+      },
+      countText: function (n) {
         return n > 99 ? '99+' : String(n);
       }
     },
@@ -425,17 +455,16 @@ const TABS = [
       '<div class="shell">',
       '  <div class="topbar">',
       '    <a class="brand" href="#/overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8c4-6 8 6 12 0s8 6 10 0M2 16c4-6 8 6 12 0s8 6 10 0"/></svg><span>深蓝牧场<small>海洋养殖智能管控</small></span></a>',
-      '    <nav class="tabs" aria-label="板块导航"><button v-for="t in tabs" :key="t.key" class="tab" :class="{active:tabKey===t.key}" :aria-pressed="tabKey===t.key" @click="tabPick(t)">{{t.label}}<span v-if="t.board && boardDots[t.board]" class="nav-dot" :title="dotText(t.board)+\'条未解除告警\'">{{dotText(t.board)}}</span></button></nav>',
-      '    <div class="spacer"></div><span class="show-header-note">深远海养殖与海洋牧场</span><button @click="catalogOpen=!catalogOpen">页面目录</button>',
+      '    <nav class="tabs" aria-label="板块导航"><button v-for="t in tabs" :key="t.key" class="tab" :class="{active:tabKey===t.key}" :aria-pressed="tabKey===t.key" @click="tabPick(t)">{{t.label}}<span v-if="t.board && boardDots[t.board]" class="nav-dot" :title="boardDots[t.board]+\'条未解除告警（全部网箱）\'">{{dotText(t.board)}}</span></button></nav>',
+      '    <div class="spacer"></div><div class="project-signature" aria-label="中国海洋大学水产学院 · 世界小中海大队"><img class="signature-university" src="assets/ouc-emblem.png" alt="中国海洋大学校徽"><img class="signature-college" src="assets/ouc-fisheries-official-mark.png" alt="中国海洋大学水产学院官方组合标"><span>世界小中海大队</span></div><button @click="catalogOpen=!catalogOpen">页面目录</button>',
       '  </div>',
       '  <div id="show-scene" data-visible="false"><canvas id="show-model" tabindex="0" aria-label="网箱与设备空间示意，支持拖动旋转"></canvas><div id="show-equipment" aria-label="设备入口"></div></div>',
       '  <div class="body">',
-      '    <nav class="sidenav" aria-label="二级页面"><template v-for="g in sideGroups" :key="g.group"><a v-for="it in g.items" :key="it.path" class="item" :class="{active:path===it.path}" :href="\'#\'+it.path" :aria-current="path===it.path?\'page\':null">{{it.label}}</a></template></nav>',
+      '    <nav class="sidenav" aria-label="二级页面"><template v-for="g in sideGroups" :key="g.group"><a v-for="it in g.items" :key="it.path" class="item" :class="{active:path===it.path}" :href="\'#\'+it.path" :aria-current="path===it.path?\'page\':null">{{it.label}}<span v-if="pageDots[it.path]" class="nav-dot" :title="pageDots[it.path]+\'条未解除告警（全部网箱）\'">{{countText(pageDots[it.path])}}</span></a></template></nav>',
       '    <div class="main"><div class="content" ref="content" :data-page="path"><div v-if="err" class="hint">页面脚本报错：{{err}}</div><div class="business-page"><component :is="page" :key="path"></component></div><div class="secondary-host"></div></div></div>',
       '  </div>',
       '  <footer class="show-footer"><span>运行数据含仿真 · 历史观测按原始时标</span><div class="show-route-pager"><button @click="step(-1)" :disabled="pageIndex===0 && screenInfo.index===0">上一屏</button><span>{{String(pageIndex+1).padStart(2,\'0\')}} / {{allPages.length}}<template v-if="screenInfo.count>1"> · {{screenInfo.index+1}}/{{screenInfo.count}}</template></span><select :value="path" @change="pick($event.target.value)" aria-label="选择展示页面"><option v-for="it in allPages" :key="it.path" :value="it.path">{{it.label}}</option></select><button @click="step(1)" :disabled="pageIndex===allPages.length-1 && screenInfo.index===screenInfo.count-1">下一屏</button></div><span class="show-footer-end">16:9 比赛展示</span></footer>',
-      '  <div class="project-signature" aria-label="中国海洋大学水产学院 · 世界小中海大队"><img class="signature-university" src="assets/ouc-emblem.png" alt="中国海洋大学校徽"><img class="signature-college" src="assets/ouc-fisheries-official-mark.png" alt="中国海洋大学水产学院官方组合标"><span>世界小中海大队</span></div>',
-      '  <section v-if="catalogOpen" class="show-catalog" aria-label="页面目录"><div class="show-catalog-head"><h2>页面导航</h2><button @click="catalogOpen=false">返回当前页</button></div><div class="show-catalog-grid"><section v-for="g in menu" :key="g.group"><h3>{{g.group}}</h3><a v-for="it in g.items" :key="it.path" :href="\'#\'+it.path" @click="catalogOpen=false">{{it.label}}</a></section></div></section>',
+      '  <section v-if="catalogOpen" class="show-catalog" aria-label="页面目录"><div class="show-catalog-head"><h2>页面导航</h2><button @click="catalogOpen=false">返回当前页</button></div><div class="show-catalog-grid"><section v-for="g in menu" :key="g.group"><h3>{{g.group}}</h3><a v-for="it in g.items" :key="it.path" :href="\'#\'+it.path" @click="catalogOpen=false">{{it.label}}<span v-if="pageDots[it.path]" class="nav-dot" :title="pageDots[it.path]+\'条未解除告警（全部网箱）\'">{{countText(pageDots[it.path])}}</span></a></section></div></section>',
       '</div>'
     ].join('\n')
   };

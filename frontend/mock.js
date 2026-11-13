@@ -32,10 +32,10 @@
         台站没有一个在渤海内部。本平台以**渤海海峡的芝罘岛**代表渤海这一格，
         如实标注；水质另取渤海内部监测点。**不假装「渤海里有浮标」。** */
   const SITES = [
+    { site_id: 'site_04', site_name: '中国近海观测站点 · 嵊山（东海）',     kind: 'obs', station_id: 'SSN', sea: '东海',   latitude: 30.8, longitude: 122.8, farming_depth_m: 0 },
+    { site_id: 'site_03', site_name: '大陈外海（东海）', kind: 'obs', station_id: 'DCN', sea: '东海', latitude: 28.5, longitude: 121.9, farming_depth_m: 0, observation_note: '大陈海洋站历史观测作海域参考，非深远海网箱现场实测；坐标为参考站位置' },
     { site_id: 'site_01', site_name: '仿真演示站点',   kind: 'farm',   latitude: 26.10, longitude: 119.90, farming_depth_m: 20 },
     { site_id: 'site_02', site_name: '中国近海观测站点 · 芝罘岛（渤海海峡）', kind: 'obs', station_id: 'ZFD', sea: '渤海海峡', latitude: 37.6, longitude: 121.4, farming_depth_m: 0 },
-    { site_id: 'site_03', site_name: '中国近海观测站点 · 小麦岛（黄海）',   kind: 'obs', station_id: 'XMD', sea: '黄海',   latitude: 36.0, longitude: 120.4, farming_depth_m: 0 },
-    { site_id: 'site_04', site_name: '中国近海观测站点 · 嵊山（东海）',     kind: 'obs', station_id: 'SSN', sea: '东海',   latitude: 30.8, longitude: 122.8, farming_depth_m: 0 },
     { site_id: 'site_05', site_name: '中国近海观测站点 · 遮浪（南海）',     kind: 'obs', station_id: 'ZLG', sea: '南海',   latitude: 22.7, longitude: 115.6, farming_depth_m: 0 }
   ];
 
@@ -367,19 +367,19 @@
   /* ---------- 告警与追溯（接口文档 5.10）—— 答辩必答题 ---------- */
   resetSeed();
   const alarms = [
-    { alarm_event_id: 'ALM-0001', alarm_type: 'tension', risk_level: 'yellow', alarm_status: 'active',
+    { alarm_event_id: 'ALM-0001', event_origin: 'preset_demo', alarm_type: 'tension', risk_level: 'yellow', alarm_status: 'active',
       alarm_ts: NOW - 8 * 60 * 1000, trigger_field: 'tension_pct', trigger_value: 83.2, trigger_threshold: 80,
       rule_id: 'R-TENSION-01', rule_name: '锚泊张力黄色预警',
       rule_condition: 'tension_pct > 80', combine_condition: null,
       trigger_snapshot: { anchor_tension: 49.9, design_tension: 60, tension_pct: 83.2, ts: NOW - 8 * 60 * 1000 },
       handling_advice: '检查锚链受力，必要时降低流速影响', handle_status: 'pending', confirm_status: 'unconfirmed' },
-    { alarm_event_id: 'ALM-0002', alarm_type: 'tilt', risk_level: 'orange', alarm_status: 'acknowledged',
+    { alarm_event_id: 'ALM-0002', event_origin: 'preset_demo', alarm_type: 'tilt', risk_level: 'orange', alarm_status: 'acknowledged',
       alarm_ts: NOW - 26 * 60 * 1000, trigger_field: 'tilt_pitch', trigger_value: 6.2, trigger_threshold: 5,
       rule_id: 'R-TILT-01', rule_name: '网箱倾斜橙色预警',
       rule_condition: 'tilt_pitch > 5 且 wave_height > 1.5', combine_condition: 'AND(wave_height>1.5)',
       trigger_snapshot: { tilt_pitch: 6.2, tilt_roll: 2.4, wave_height: 1.8, ts: NOW - 26 * 60 * 1000 },
       handling_advice: '关注网箱姿态，检查配重', handle_status: 'handling', confirm_status: 'confirmed' },
-    { alarm_event_id: 'ALM-0003', alarm_type: 'low_battery', risk_level: 'yellow', alarm_status: 'recovered',
+    { alarm_event_id: 'ALM-0003', event_origin: 'preset_demo', alarm_type: 'low_battery', risk_level: 'yellow', alarm_status: 'recovered',
       alarm_ts: NOW - 55 * 60 * 1000, trigger_field: 'battery_soc', trigger_value: 19.4, trigger_threshold: 20,
       rule_id: 'R-BAT-01', rule_name: '储能低电量黄色预警',
       rule_condition: 'battery_soc < 20', combine_condition: null,
@@ -447,6 +447,7 @@
 
     env: function (siteId, minutes, opts) { return envSeries(siteId, minutes || 60, opts); },
     fish: function (minutes) { return fishSeries(minutes || 60); },
+    fishGrowth: function () { return []; },
     heatGrid: function () { return heatGrid(); },
     struct: function (minutes) { return structSeries(minutes || 60); },
 

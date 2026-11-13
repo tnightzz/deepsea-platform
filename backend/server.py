@@ -44,7 +44,7 @@ import threading
 import time
 import urllib.request
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -112,6 +112,8 @@ def sync_sites_from_farm():
     改了 farm.json 也不生效。现在**以 farm.json 为准** —— 它才是"养什么鱼"的唯一事实来源。
     """
     global SITES
+    site_order = {s["site_id"]: i for i, s in enumerate(FARM.data["sites"])}
+    SITES.sort(key=lambda s: site_order[s["site_id"]])
     for s in SITES:
         cages = [c for c in FARM.all_cages() if c["site_id"] == s["site_id"]]
         if not cages:
@@ -235,7 +237,7 @@ def lwr_of(species_cn):
 # 站点（接口文档 8.1）
 # ----------------------------------------------------------------------
 SITES = [
-    {"site_id": "site_01", "site_name": "模拟养殖站点", "kind": "farm",
+    {"site_id": "site_01", "site_name": "仿真演示站点", "kind": "farm",
      "latitude": 26.10, "longitude": 119.90, "farming_depth_m": 20,
      # 主养种：大黄鱼（福建宁德一带的主养鱼种，与站点位置 26.1N/119.9E 对得上）
      "species": "大黄鱼", "stock_init_count": 1200, "stock_init_size_g": 420},
@@ -262,9 +264,10 @@ SITES = [
     {"site_id": "site_02", "site_name": "中国近海观测站点 · 芝罘岛（渤海海峡）",
      "kind": "obs", "station_id": "ZFD", "sea": "渤海海峡",
      "latitude": 37.6, "longitude": 121.4, "farming_depth_m": 0},
-    {"site_id": "site_03", "site_name": "中国近海观测站点 · 小麦岛（黄海）",
-     "kind": "obs", "station_id": "XMD", "sea": "黄海",
-     "latitude": 36.0, "longitude": 120.4, "farming_depth_m": 0},
+    {"site_id": "site_03", "site_name": "大陈外海（东海）",
+     "kind": "obs", "station_id": "DCN", "sea": "东海",
+     "latitude": 28.5, "longitude": 121.9, "farming_depth_m": 0,
+     "observation_note": "大陈海洋站历史观测作海域参考，非深远海网箱现场实测；坐标为参考站位置"},
     {"site_id": "site_04", "site_name": "中国近海观测站点 · 嵊山（东海）",
      "kind": "obs", "station_id": "SSN", "sea": "东海",
      "latitude": 30.8, "longitude": 122.8, "farming_depth_m": 0},
@@ -427,29 +430,25 @@ def fish_sim_control(action=None, mode=None):
 
 
 def planned_weight(cage, ts_ms):
-    """计划生长曲线在 ts_ms（毫秒）处的体重：放养日·初始规格 → 计划起捕日·目标规格，线性插值。
-
-    为什么用线性、不用 von Bertalanffy：后者要文献生长参数，我们没有就不能编；
-    线性只需台账里已有的 4 个真实值（放养/起捕日期、初始/目标规格），口径可追溯。
-    任一配置缺失（或缺生长计划）返回 None，调用方**不许编一条假曲线**。
-    """
+    """按台账端点做 S 型示意插值，不是经文献参数校准的生长模型。"""
     if not cage:
         return None
     st = cage.get("stocking") or {}
     try:
-        t0 = datetime.strptime(st["date"], "%Y-%m-%d").timestamp() * 1000
-        t1 = datetime.strptime(st["plan_harvest"], "%Y-%m-%d").timestamp() * 1000
+        t0 = datetime.strptime(st["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000
+        t1 = datetime.strptime(st["plan_harvest"], "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000
         w0 = float(st["init_size_g"])
         w1 = float(st["target_size_g"])
     except (KeyError, ValueError, TypeError):
         return None
-    if t1 <= t0:
+    if t1 <= t0 or not math.isfinite(w0) or not math.isfinite(w1) or w0 <= 0 or w1 <= w0:
         return None
     if ts_ms <= t0:
         return w0
     if ts_ms >= t1:
         return w1
-    return w0 + (w1 - w0) * (ts_ms - t0) / (t1 - t0)
+    u = (ts_ms - t0) / (t1 - t0)
+    return w0 + (w1 - w0) * (3 * u * u - 2 * u * u * u)
 
 
 def fish_series(minutes=60, cage_id=None):
@@ -535,6 +534,25 @@ def fish_series(minutes=60, cage_id=None):
     return out
 
 
+def fish_growth_history(cage_id):
+    """每日历史按台账生成，非现场实测或已存档样本；末点复用当前仿真读数。"""
+    cage = FARM.cage(cage_id)
+    if not cage or planned_weight(cage, 0) is None:
+        return []
+    ts = int(datetime.strptime(cage["stocking"]["date"], "%Y-%m-%d")
+             .replace(tzinfo=timezone.utc).timestamp() * 1000)
+    latest = fish_series(5, cage_id)[-1]
+    rows = []
+    while ts < latest["ts"]:
+        noise = random.Random("growth:%s:%d" % (cage_id, ts)).gauss(0, 1.5) if rows else 0
+        rows.append({"ts": ts, "cage_id": cage_id, "site_id": cage["site_id"],
+                     "avg_weight_g": round(max(1, planned_weight(cage, ts) + noise), 1),
+                     "source": "simulated", "quality": "good"})
+        ts += 86400000
+    rows.append({k: latest[k] for k in ("ts", "cage_id", "site_id", "avg_weight_g", "source", "quality")})
+    return rows
+
+
 def heat_grid():
     """10×10 鱼群密度网格（拍板问题单 问题 5 建议 A）。
 
@@ -563,52 +581,55 @@ def heat_grid():
     return g
 
 
-def fish_positions_3d():
-    """三维鱼群位置（点云）：给三维热力图用。
+def fish_positions_3d(cage_id="cage_01"):
+    """按台账形状生成展示点云；米制 X/Y 非负，Z 向下为水深。
 
-    返回单位为米的网箱内坐标（X/Y 10m × 10m，水深 Z 8m），每条鱼一个点，
-    点的状态 s：0=正常（冷色）、1=摄食活跃（暖色）、2=异常（红）。
-    与仿真场景联动：聚集→中心收紧成球；密度骤降→点数减少、分散；
-    摄食异常→大多静止、偶有红点；生成器停止/摄像头离线→返回 None（不编数据）。
+    大黄鱼集群中下层、许氏平鲉贴底分散均为仿真设计，不是实测习性量化结果。
+    s：0=正常、1=摄食活跃、2=异常；停止/摄像头离线返回 None。
     """
+    cage = FARM.cage(cage_id)
+    if not cage:
+        raise LookupError("网箱不存在")
+    spec = cage["spec"]
+    dims = {"x": spec["length_m"], "y": spec["width_m"], "z": spec["depth_m"]}
+    hexagon = spec.get("plan_shape") == "hexagon"
+    benthic = cage.get("species") == "许氏平鲉"
     sim = fish_sim_state()
     gen, mode = sim["gen_status"], sim["sim_mode"]
     if gen == "stopped" or mode == "camera_off":
         return None
-    r = _rng()
-    DIMS = {"x": 10.0, "y": 10.0, "z": 8.0}
-    n_points = 1000
-    if mode == "density_drop":
-        n_points = 650
+    r = _rng(20261028 if cage_id == "cage_02" else 20261005)
+    n_points = 650 if mode == "density_drop" else 1000
     pts = []
-    if mode == "cluster":
-        cx, cy, cz = 7.5, 2.5, 4.0
-        for _ in range(n_points):
-            x = min(9.9, max(0.1, cx + r.gauss(0, 1.0)))
-            y = min(9.9, max(0.1, cy + r.gauss(0, 1.0)))
-            z = min(7.9, max(0.1, cz + r.gauss(0, 1.2)))
-            s = 1 if r.random() < 0.2 else 0
-            pts.append({"x": round(x, 2), "y": round(y, 2), "z": round(z, 2), "s": s})
-        return {"dims": DIMS, "points": pts, "mode": mode, "gen_status": gen}
-
-    # ---- 正常 / 密度骤降 / 摄食异常 的分布 ----
-    # 🔴 2026-10-15 队长修：这一段原来被错插到 fish_cameras() 的 return 之后，
-    #    成了**死代码** —— 结果是 fish_positions_3d() 在**默认（正常）场景下返回 None**，
-    #    三维热力图打开是一片空白，只有切到「鱼群聚集」造故障才有数据。
-    #    语法合法、页面能开、验收 9/9 也过 —— 光看代码或跑验收都发现不了，
-    #    是把函数**实际调了一遍**才抓到的。
-    for _ in range(n_points):
-        # 正常分布：围绕中心 (4.5, 5.2)，鱼群集中在中上层（Z 约 2.5~5.5）
-        x = min(9.9, max(0.1, 4.5 + r.gauss(0, 2.2)))
-        y = min(9.9, max(0.1, 5.2 + r.gauss(0, 2.2)))
-        z = min(7.9, max(0.1, 4.0 + r.gauss(0, 1.6)))
+    while len(pts) < n_points:
+        if mode == "cluster":
+            x = r.gauss(dims["x"] * .62, dims["x"] * .055)
+            y = r.gauss(dims["y"] * .40, dims["y"] * .055)
+            z = r.gauss(dims["z"] * .70, dims["z"] * .08)
+        elif benthic or mode == "density_drop":
+            # 六角平面均匀拒绝采样，避免把外接矩形角落误当养殖水体。
+            x, y = r.uniform(0, dims["x"]), r.uniform(0, dims["y"])
+            z = dims["z"] * r.uniform(.84, .97) if benthic else r.uniform(.25, .95) * dims["z"]
+        else:
+            x = r.gauss(dims["x"] * .48, dims["x"] * .12)
+            y = r.gauss(dims["y"] * .52, dims["y"] * .12)
+            z = r.gauss(dims["z"] * .70, dims["z"] * .11)
+        x, y, z = round(x, 2), round(y, 2), round(z, 2)
+        if not (0 <= x <= dims["x"] and 0 <= y <= dims["y"] and 0 <= z <= dims["z"]):
+            continue
+        if hexagon:
+            radius, half_flat = spec["side_m"], spec["across_flats_m"] / 2
+            if abs(x - radius) + abs(y - half_flat) / math.sqrt(3) > radius:
+                continue
         if mode == "feeding_abnormal":
             # 多数静止（状态0），偶发个别异常红点
             s = 2 if r.random() < 0.04 else 0
         else:
-            s = 1 if r.random() < 0.18 else 0
-        pts.append({"x": round(x, 2), "y": round(y, 2), "z": round(z, 2), "s": s})
-    return {"dims": DIMS, "points": pts, "mode": mode, "gen_status": gen}
+            s = 1 if r.random() < (.2 if mode == "cluster" else .18) else 0
+        pts.append({"x": x, "y": y, "z": z, "s": s})
+    return {"cage_id": cage_id, "species": cage["species"], "plan_shape": spec["plan_shape"],
+            "dims": dims, "points": pts, "mode": mode, "gen_status": gen,
+            "source": "simulated", "distribution_note": "展示仿真：大黄鱼集群中下层；许氏平鲉贴底分散。非实测分布。"}
 
 
 def fish_cameras():
@@ -666,7 +687,7 @@ def struct_series(minutes=60, storm=False, cage_id="cage_01"):
     # 下列差异仅是演示曲线，不代表两箱的实际设计载荷或现场测量。
     #
     # ⚠️ 站点仍取**该网箱所在海域**（10-16 会上定：cage_01 → site_04 嵊山、
-    #    cage_02 → site_03 小麦岛）。他原分支写的是"两箱同处 site_01"，那是迁站前的假设。
+    #    cage_02 → site_03 大陈外海）。他原分支写的是"两箱同处 site_01"，那是迁站前的假设。
     _cage = FARM.cage(cage_id) or FARM.cage("cage_01") or {}
     _cage_site = _cage.get("site_id") or SITES[0]["site_id"]
     second_cage = cage_id == "cage_02"
@@ -854,7 +875,73 @@ class Platform(object):
         self.commands = []
         self._seq = 0
         self.alarms = self._seed_alarms()
+        for alarm in self.alarms:
+            alarm["event_origin"] = "preset_demo"
         self._seed_commands()      # 预置几条真实历史命令（投喂记录从它派生）
+
+    def update_struct_alarms(self, row):
+        """只根据当前有效上报值登记/恢复事件；预置示例不参与业务状态。"""
+        cage = FARM.cage(row.get("cage_id"))
+        if not cage or row.get("quality") == "stale" or row.get("site_id") != cage["site_id"]:
+            return
+
+        def number(value):
+            try:
+                n = float(value)
+                return n if math.isfinite(n) else None
+            except (ValueError, TypeError):
+                return None
+
+        lines = [x for x in row.get("mooring_lines", [])
+                 if number(x.get("anchor_tension")) is not None and (number(x.get("design_tension")) or 0) > 0]
+        line = max(lines, key=lambda x: float(x["anchor_tension"]) / float(x["design_tension"])) if lines else {}
+        pct = float(line["anchor_tension"]) / float(line["design_tension"]) * 100 if line else number(row.get("tension_pct"))
+        angles = [(k, abs(number(row[k]))) for k in ("tilt_roll", "tilt_pitch", "tilt_angle")
+                  if number(row.get(k)) is not None]
+        field, tilt = max(angles, key=lambda x: x[1]) if angles else ("tilt_angle", None)
+        ts = row.get("ts")
+        if number(ts) is None:
+            return
+        for family, value, warn, alarm, trigger_field, label in (
+                ("tension", pct, 80, 95, "tension_pct", "锚泊张力"),
+                ("tilt", tilt, 5, 15, field, "网箱倾斜")):
+            if value is None:
+                continue  # 缺数不能证明恢复。
+            level = "red" if value >= alarm else "yellow" if value >= warn else None
+            rule_id = "R-%s-%s" % (family.upper(), "02" if level == "red" else "01")
+            with self.lock:
+                active = next((a for a in self.alarms if a.get("event_origin") == "struct_monitor"
+                               and a.get("cage_id") == cage["cage_id"] and a["alarm_type"] == family
+                               and a["alarm_status"] != "recovered"), None)
+                if active and level and (active["risk_level"] == "red" or level == "yellow"):
+                    active["last_seen_ts"] = ts
+                    continue
+                if active and not level:
+                    active.update(alarm_status="recovered", recover_ts=ts,
+                                  recovery_value=round(value, 1))
+                if not level:
+                    continue
+                snapshot = {k: row.get(k) for k in ("ts", "tilt_roll", "tilt_pitch", "tilt_angle", "tension_pct")}
+                if family == "tension":
+                    snapshot.update(line)
+                    snapshot["tension_pct"] = round(value, 1)
+                event = {
+                    "alarm_event_id": "STR-%05d" % (len(self.alarms) + 1),
+                    "event_origin": "struct_monitor", "source": row.get("source", "unknown"),
+                    "cage_id": cage["cage_id"], "site_id": cage["site_id"],
+                    "chain_id": line.get("chain_id") if family == "tension" else None,
+                    "alarm_type": family, "risk_level": level, "alarm_status": "active",
+                    "alarm_ts": ts, "last_seen_ts": ts, "trigger_field": trigger_field,
+                    "trigger_value": round(value, 1), "trigger_threshold": alarm if level == "red" else warn,
+                    "rule_id": rule_id, "rule_name": label + ("红色预警" if level == "red" else "黄色提示"),
+                    "rule_condition": "%s >= %s" % (trigger_field, alarm if level == "red" else warn),
+                    "trigger_snapshot": snapshot, "confirm_status": "unconfirmed", "handle_status": "pending",
+                    "handling_advice": "核对触发测点、当前读数与现场情况，再按现场规程处置。"}
+                if active:
+                    event.update(alarm_event_id=active["alarm_event_id"], alarm_ts=active["alarm_ts"], escalated_ts=ts)
+                    active.update(event)
+                else:
+                    self.alarms.insert(0, event)
 
     def _build_devices(self):
         """设备运行状态：按正式台账生成，两箱各一套，不串箱。
@@ -1421,13 +1508,22 @@ class Handler(BaseHTTPRequestHandler):
             # 🔴 2026-10-18：接 cage_id，首页 KPI 跟着当前网箱切
             return self._json(fish_series(minutes, cage_id=(one("cage_id", "") or None)))
 
+        if p == "/api/fish/growth":
+            cid = one("cage_id", "cage_01")
+            if not FARM.cage(cid):
+                return self._err(404, "网箱不存在")
+            return self._json(fish_growth_history(cid))
+
         if p == "/api/heatmap":
             g = heat_grid()
             return self._json({"grid": g, "resolution": "10x10",
                                "offline": g is None})
 
         if p == "/api/fish/positions3d":
-            d = fish_positions_3d()
+            cid = one("cage_id", "cage_01")
+            if not FARM.cage(cid):
+                return self._err(404, "网箱不存在")
+            d = fish_positions_3d(cid)
             return self._json({"data": d, "offline": d is None})
 
         if p == "/api/fish/cameras":
@@ -1442,8 +1538,10 @@ class Handler(BaseHTTPRequestHandler):
             cage_id = one("cage_id", "cage_01")
             if cage_id not in ("cage_01", "cage_02") or not FARM.cage(cage_id):
                 return self._err(404, "网箱不存在")
-            return self._json(struct_series(
-                minutes, one("storm", "0") in ("1", "true"), cage_id))
+            rows = struct_series(minutes, one("storm", "0") in ("1", "true"), cage_id)
+            if rows:
+                PLATFORM.update_struct_alarms(rows[-1])
+            return self._json(rows)
 
         if p == "/api/feed/decision":
             cid = one("cage_id", "cage_01")

@@ -98,11 +98,16 @@
     if (cageId) q.cage_id = cageId;
     return get('/api/fish', q);
   };
+  M.fishGrowth = function (cageId) {
+    return get('/api/fish/growth', { cage_id: cageId });
+  };
   /* struct 用他的签名（opts 对象，能同时传 storm 和 cageId）——
      位置参数版本没法同时传 storm，扩展性差。 */
   M.struct = function (m, opts) {
     opts = opts || {};
-    return get('/api/struct', { minutes: m || 60, storm: opts.storm ? 1 : 0,
+    let storm = opts.storm;
+    try { if (storm === undefined) storm = global.sessionStorage.getItem('struct-storm-demo') === '1'; } catch (e) {}
+    return get('/api/struct', { minutes: m || 60, storm: storm ? 1 : 0,
                                 cage_id: opts.cageId || 'cage_01' });
   };
   M.heatGrid = function () { return get('/api/heatmap').then(function (d) { return d.grid; }); };

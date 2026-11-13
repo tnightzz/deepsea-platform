@@ -1,0 +1,125 @@
+{
+  "build_tool": "fontTools 4.68.0",
+  "fonts": [
+    {
+      "file": "sans-trial.woff2",
+      "family": "Marine Trial Sans",
+      "original_family": "Noto Sans SC",
+      "original_version": "Version 2.04;241114210130;non-release",
+      "source": "C:\\Windows\\Fonts\\NotoSansSC-VF.ttf",
+      "license_url": "https://github.com/google/fonts/blob/main/ofl/notosanssc/OFL.txt",
+      "source_sha256": "763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a",
+      "bytes": 359684,
+      "digit_widths_default": [
+        521,
+        521,
+        521,
+        521,
+        521,
+        521,
+        521,
+        521,
+        521,
+        521
+      ],
+      "tnum": false,
+      "lnum": false
+    },
+    {
+      "file": "serif-trial.woff2",
+      "family": "Marine Trial Serif",
+      "original_family": "Noto Serif SC",
+      "original_version": "Version 2.02;241114204558;non-release",
+      "source": "C:\\Windows\\Fonts\\NotoSerifSC-VF.ttf",
+      "license_url": "https://github.com/google/fonts/blob/main/ofl/notoserifsc/OFL.txt",
+      "source_sha256": "a4aed9985a5916fbf6690456f8732a9fccd517938e353165d4142b4f11a39280",
+      "bytes": 469032,
+      "digit_widths_default": [
+        542,
+        473,
+        544,
+        542,
+        540,
+        544,
+        544,
+        533,
+        544,
+        548
+      ],
+      "tnum": false,
+      "lnum": false
+    },
+    {
+      "file": "plex-trial.woff2",
+      "family": "Marine Trial Plex",
+      "original_family": "IBM Plex Sans",
+      "original_version": "Version 3.201",
+      "source": "C:\\Users\\38793\\Documents\\比赛\\.planning\\typography-20261029\\font-originals\\plex.ttf",
+      "license_url": "https://github.com/google/fonts/blob/main/ofl/ibmplexsans/OFL.txt",
+      "source_sha256": "3b031aa4216174205bd8471f88a49b91f093169e9e87bd5262242bc5967fe2e3",
+      "bytes": 61500,
+      "digit_widths_default": [
+        600,
+        600,
+        600,
+        600,
+        600,
+        600,
+        600,
+        600,
+        600,
+        600
+      ],
+      "tnum": false,
+      "lnum": true
+    },
+    {
+      "file": "source-trial.woff2",
+      "family": "Marine Trial Source",
+      "original_family": "Source Serif 4",
+      "original_version": "Version 4.004;hotconv 1.0.116;makeotfexe 2.5.65601",
+      "source": "C:\\Users\\38793\\Documents\\比赛\\.planning\\typography-20261029\\font-originals\\source.ttf",
+      "license_url": "https://github.com/google/fonts/blob/main/ofl/sourceserif4/OFL.txt",
+      "source_sha256": "97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b",
+      "bytes": 111468,
+      "digit_widths_default": [
+        500,
+        500,
+        500,
+        500,
+        500,
+        500,
+        500,
+        500,
+        500,
+        500
+      ],
+      "tnum": true,
+      "lnum": true
+    },
+    {
+      "file": "barlow-trial.woff2",
+      "family": "Marine Trial Barlow",
+      "original_family": "Barlow Condensed SemiBold",
+      "original_version": "Version 1.408",
+      "source": "C:\\Users\\38793\\Documents\\比赛\\.planning\\typography-20261029\\font-originals\\barlow.ttf",
+      "license_url": "https://github.com/google/fonts/blob/main/ofl/barlowcondensed/OFL.txt",
+      "source_sha256": "7b619d14bc2327509a9ef32b0890f709626f7ecc9ff61191c2a4314c5499d2d9",
+      "bytes": 19396,
+      "digit_widths_default": [
+        450,
+        274,
+        425,
+        426,
+        459,
+        428,
+        429,
+        392,
+        434,
+        423
+      ],
+      "tnum": true,
+      "lnum": false
+    }
+  ]
+}

@@ -117,7 +117,7 @@ def site(site_id):
 
 
 def station_id_of(site_id):
-    """观测站点对应的台站站码（ZFD/XMD/SSN/ZLG）；养殖站点返回 None。"""
+    """观测站点对应的台站站码（ZFD/DCN/SSN/ZLG）；养殖站点返回 None。"""
     s = site(site_id)
     return (s or {}).get("station_id")
 
@@ -265,6 +265,7 @@ def historical(site_id, start_ts, end_ts, max_points=720):
             "source": "public",
             "source_detail": "国家海洋科学数据中心（NMDC）中国台站观测数据 · %s（%s）实测"
                              % (meta.get("station_cn", sid), meta.get("sea", "")),
+            "reference_note": meta.get("sea_note", ""),
             "start_ts": start_ts,
             "end_ts": end_ts,
             "count": len(out),

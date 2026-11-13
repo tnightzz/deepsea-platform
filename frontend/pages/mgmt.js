@@ -34,7 +34,12 @@
     },
     computed: {
       farm: function () { this.tick; return API.farm(); },
-      sites: function () { const f = this.farm; return (f && f.sites) || []; },
+      sites: function () {
+        const f = this.farm, farms = (f && f.sites) || [];
+        return API.sites().map(function (s) {
+          return Object.assign({}, s, { farming_depth_m: null }, farms.find(function (x) { return x.site_id === s.site_id; }));
+        });
+      },
       cages: function () { const f = this.farm; return (f && f.cages) || []; },
       currentCage: function () { this.tick; return this.cages.find(function (c) { return c.cage_id === global.CurrentCage.get(); }) || null; },
       speciesList: function () { const s = API.species(); return s || []; },
@@ -43,6 +48,11 @@
     },
     methods: {
       selectCage: function (id) { global.CurrentCage.set(id); },
+      specText: function (spec) {
+        return global.StructTrussCage && global.StructTrussCage.describeSpec ?
+          global.StructTrussCage.describeSpec(spec) : '规格待加载';
+      },
+      fixed2: function (value) { return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toFixed(2); },
       /* 可养的鱼种 = 两个库里都有参数的。没温度参数的鱼不给养 ——
          否则设不出水温阈值，等于给自己挖坑（后端也会拦）。 */
       canRaise: function (cn) {
@@ -107,7 +117,7 @@
       "<span class=\"k\">状态</span>",
       "<span>{{ statusCn(currentCage.status) }}</span>",
       "</div>",
-      "<p class=\"show-note\">{{ currentCage.note }}</p>",
+      "<p class=\"show-note\">{{ specText(currentCage.spec) }} · 水体 {{ fixed2(currentCage.spec?.effective_volume_m3) }} m³<br>{{ currentCage.note }}</p>",
       "</template>",
       "<secondary-page title=\"鱼种配置与生效范围\">",
       "<div class=\"show-body\">",
@@ -137,7 +147,7 @@
       "<td>{{ s.site_name }}<br>",
       "<span class=\"small muted\">{{ s.site_id }}</span>",
       "</td>",
-      "<td>{{ s.location_note }}<br>{{ s.longitude }}° / {{ s.latitude }}°</td>",
+      "<td>{{ s.location_note || s.sea }}<br>{{ s.longitude }}° / {{ s.latitude }}°</td>",
       "<td>{{ s.farming_depth_m ?? '—' }} m</td>",
       "<td>",
       "<button v-for=\"c in cages.filter(c=>c.site_id===s.site_id)\" :key=\"c.cage_id\" @click=\"selectCage(c.cage_id)\">{{ c.cage_name }}</button>",
@@ -175,7 +185,7 @@
       "<br>",
       "<span class=\"small\">{{ speciesTempOf(c.species).species_latin }}<br>最适 {{ speciesTempOf(c.species).temp_opt_low ?? '—' }}~{{ speciesTempOf(c.species).temp_opt_high ?? '—' }} ℃<br>告警低 {{ speciesTempOf(c.species).temp_alarm_low ?? '—' }} / 高 {{ speciesTempOf(c.species).temp_alarm_high ?? '—' }} ℃</span>",
       "</td>",
-      "<td>{{ c.spec.shape }}<br>周长 {{ c.spec.circumference_m }} m · 深 {{ c.spec.depth_m }} m<br>网目 {{ c.spec.net_mesh_mm }} mm</td>",
+      "<td style=\"white-space:normal\">{{ c.spec.shape }} · {{ specText(c.spec) }}<br>有效水体 {{ fixed2(c.spec.effective_volume_m3) }} m³<br>周长 {{ fixed2(c.spec.circumference_m) }} m · 网目 {{ c.spec.net_mesh_mm }} mm</td>",
       "<td>{{ c.stocking.date }}<br>{{ c.stocking.init_count }} 尾 / {{ c.stocking.init_size_g }} g<br>现存 {{ c.current_count }} 尾</td>",
       "<td>",
       "<button @click=\"selectCage(c.cage_id);startEdit(c)\">改鱼种</button>",
@@ -592,7 +602,7 @@
           return Number(a.alarm_status === 'recovered') - Number(b.alarm_status === 'recovered') || (rank[b.risk_level] || 0) - (rank[a.risk_level] || 0) || b.alarm_ts - a.alarm_ts;
         });
       },
-      unresolved: function () { return this.all.filter(function (a) { return a.alarm_status !== 'recovered'; }); },
+      unresolved: function () { return this.all.filter(function (a) { return a.alarm_status !== 'recovered' && a.event_origin !== 'preset_demo'; }); },
       counts: function () {
         const c = { red: 0, orange: 0, yellow: 0, blue: 0 };
         this.all.forEach(function (a) { if (c[a.risk_level] !== undefined) c[a.risk_level]++; });
@@ -633,7 +643,10 @@
           return { k: k, label: self.fieldText(k), v: String(v) };
         });
       },
-      cfCn: function (s2) { return { unconfirmed: '未确认', confirmed: '已确认' }[s2] || s2 || '—'; }
+      cfCn: function (s2) { return { unconfirmed: '未确认', confirmed: '已确认' }[s2] || s2 || '—'; },
+      handlingLabel: function (a) { return global.AlarmRoutes.labelFor(global.AlarmRoutes.pageFor(a)); },
+      canLocate: function (a) { return a.event_origin !== 'preset_demo' && global.AlarmRoutes.pageFor(a) === '/struct/detail'; },
+      locate: function (a) { global.AlarmRoutes.focusId = a.alarm_event_id; global.location.hash = global.AlarmRoutes.pageFor(a); }
     },
     mounted: function () {
       const self = this;
@@ -677,14 +690,14 @@
       "</div>",
       "<paged-records :items=\"rows\" :size=\"6\">",
       "<template #default=\"{rows}\">",
-      "<table class=\"dt\">",
+      "<table class=\"dt alarm-routing-table\">",
       "<thead>",
       "<tr>",
       "<th>事件 / 等级</th>",
       "<th>类型 / 规则</th>",
       "<th>预警时间</th>",
       "<th>状态 / 处置</th>",
-      "<th>追溯</th>",
+      "<th>处置入口 / 追溯</th>",
       "</tr>",
       "</thead>",
       "<tbody>",
@@ -692,11 +705,13 @@
       "<td>{{ a.alarm_event_id }}<br>",
       "<span class=\"dot\" :class=\"lvCls(a.risk_level)\">",
       "</span>{{ lvCn(a.risk_level) }}</td>",
-      "<td>{{ typeCn(a.alarm_type) }}<br>{{ a.rule_id }} · {{ a.rule_name }}</td>",
+      "<td>{{ typeCn(a.alarm_type) }}<br>{{ a.rule_id }} · {{ a.rule_name }}<span v-if=\"a.event_origin==='preset_demo'\" class=\"small muted\"><br>预置演示 · 不计业务红点</span></td>",
       "<td>{{ time(a.alarm_ts) }}</td>",
       "<td>{{ stCn(a.alarm_status) }}<br>{{ hdCn(a.handle_status) }}</td>",
       "<td>",
       "<button @click.stop=\"pick(a)\">选择追溯</button>",
+      " {{ handlingLabel(a) }}",
+      "<button v-if=\"canLocate(a)\" @click.stop=\"locate(a)\">定位异常</button>",
       "</td>",
       "</tr>",
       "</tbody>",
@@ -805,7 +820,7 @@
     computed: {
       alarms: function () { this.tick; return API.alarms(); },
       pending: function () {
-        return this.alarms.filter(function (a) { return a.handle_status !== 'handled'; }).sort(function (a, b) { const rank = { red: 4, orange: 3, yellow: 2, blue: 1 }; return (rank[b.risk_level] || 0) - (rank[a.risk_level] || 0); });
+        return this.alarms.filter(function (a) { return a.handle_status !== 'handled' && a.event_origin !== 'preset_demo'; }).sort(function (a, b) { const rank = { red: 4, orange: 3, yellow: 2, blue: 1 }; return (rank[b.risk_level] || 0) - (rank[a.risk_level] || 0); });
       },
       commands: function () {
         this.tick;
@@ -829,9 +844,8 @@
         if (!cid || !cages.some(function (c) { return c.cage_id === cid; })) { this.actionMsg = '告警网箱归属尚未确认，请先核查位置与台账。'; return; }
         this.actionMsg = '';
         if (global.CurrentCage) global.CurrentCage.set(cid);
-        const t = a.alarm_type || '';
-        const route = /tension|tilt|net|deformation/.test(t) ? '/struct/detail' : /battery|power/.test(t) ? '/mgmt/energy' : /water|oxygen|salinity|ph/.test(t) ? '/env/water' : /command|device/.test(t) ? '/ai/commands' : '/ai/feed';
-        global.location.hash = route;
+        global.AlarmRoutes.focusId = a.alarm_event_id;
+        global.location.hash = global.AlarmRoutes.pageFor(a);
       },
       confirmAlarm: function (a) {
         const self = this;
